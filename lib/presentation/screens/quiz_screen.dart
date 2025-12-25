@@ -403,3 +403,165 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
     }
   }
 }
+
+
+/// Quiz Result Screen - Shows score and review
+class QuizResultScreen extends StatelessWidget {
+  final Quiz quiz;
+  final int score;
+  final List<int> answers;
+  final int timeTaken;
+
+  const QuizResultScreen({
+    super.key,
+    required this.quiz,
+    required this.score,
+    required this.answers,
+    required this.timeTaken,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final percentage = (score / quiz.questions.length * 100).round();
+    final isPassed = percentage >= 60;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Quiz Results'),
+        automaticallyImplyLeading: false,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            // Score Card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isPassed
+                      ? [AppTheme.successColor, AppTheme.successColor.withOpacity(0.8)]
+                      : [AppTheme.errorColor, AppTheme.errorColor.withOpacity(0.8)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  Icon(isPassed ? Icons.emoji_events : Icons.refresh, size: 64, color: Colors.white),
+                  const SizedBox(height: 16),
+                  Text(isPassed ? 'Great Job!' : 'Keep Trying!',
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 8),
+                  Text('$score / ${quiz.questions.length}',
+                      style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text('$percentage%', style: TextStyle(fontSize: 20, color: Colors.white.withOpacity(0.9))),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Time: ${(timeTaken / 60).toStringAsFixed(1)} min',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Review Section
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Review Answers', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 16),
+
+            ...List.generate(quiz.questions.length, (index) {
+              final question = quiz.questions[index];
+              final userAnswer = answers[index];
+              final isCorrect = userAnswer == question.correctIndex;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isCorrect ? AppTheme.successColor.withOpacity(0.3) : AppTheme.errorColor.withOpacity(0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: isCorrect ? AppTheme.successColor : AppTheme.errorColor,
+                          child: Icon(isCorrect ? Icons.check : Icons.close, size: 16, color: Colors.white),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('Question ${index + 1}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(question.question, style: const TextStyle(fontSize: 15)),
+                    const SizedBox(height: 12),
+                    if (userAnswer != -1)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isCorrect ? AppTheme.successColor.withOpacity(0.1) : AppTheme.errorColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Text('Your answer: ', style: TextStyle(color: AppTheme.textSecondary)),
+                            Expanded(
+                              child: Text(question.options[userAnswer],
+                                  style: TextStyle(fontWeight: FontWeight.w500, color: isCorrect ? AppTheme.successColor : AppTheme.errorColor)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (!isCorrect) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.successColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Text('Correct answer: ', style: TextStyle(color: AppTheme.textSecondary)),
+                            Expanded(
+                              child: Text(question.options[question.correctIndex],
+                                  style: TextStyle(fontWeight: FontWeight.w500, color: AppTheme.successColor)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
+                child: const Text('Back to Home'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -11,6 +11,7 @@ import '../../services/auth_service.dart';
 import '../../services/hive_service.dart';
 import '../../services/student_service.dart';
 import 'career_explorer_screen.dart';
+import 'quiz_screen.dart';
 
 /// Student Home Screen - Professional 2025 UI
 class StudentHomeScreen extends StatefulWidget {
@@ -65,7 +66,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   void _navigateToExplore() => setState(() => _currentIndex = 1);
-  void _navigateToQuiz() => setState(() => _currentIndex = 1); // Navigate to explore for now
+  void _navigateToQuiz() => setState(() => _currentIndex = 2);
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +78,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           children: [
             _HomeTab(student: _student, onLogout: _handleLogout, onExplore: _navigateToExplore, onQuiz: _navigateToQuiz),
             const CareerExplorerScreen(),
+            const QuizListScreen(),
             _NoticesTab(student: _student),
             _DoubtsTab(student: _student),
             _ProfileTab(student: _student, onLogout: _handleLogout),
@@ -88,8 +90,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           destinations: const [
             NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
             NavigationDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Explore'),
+            NavigationDestination(icon: Icon(Icons.quiz_outlined), selectedIcon: Icon(Icons.quiz), label: 'Quizzes'),
             NavigationDestination(icon: Icon(Icons.campaign_outlined), selectedIcon: Icon(Icons.campaign), label: 'Notices'),
-            NavigationDestination(icon: Icon(Icons.help_outline), selectedIcon: Icon(Icons.help), label: 'Doubts'),
             NavigationDestination(icon: Icon(Icons.person_outlined), selectedIcon: Icon(Icons.person), label: 'Profile'),
           ],
         ),

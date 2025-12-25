@@ -165,43 +165,47 @@ class TeacherService {
   }
 
   /// STREAM: All unresolved doubts (for Teacher's Doubts Hub)
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<Doubt>> unresolvedDoubtsStream() {
-    return _doubtsRef
-        .where('isResolved', isEqualTo: false)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _doubtsRef.snapshots().map((snapshot) {
+      final doubts = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return Doubt.fromMap(data);
-      }).toList();
+      }).where((d) => !d.isResolved).toList();
+      // Sort locally by createdAt descending
+      doubts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return doubts;
     });
   }
 
   /// STREAM: All doubts (for Teacher)
+  /// Note: Sorting done locally to avoid index issues
   Stream<List<Doubt>> allDoubtsStream() {
-    return _doubtsRef.orderBy('createdAt', descending: true).snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _doubtsRef.snapshots().map((snapshot) {
+      final doubts = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return Doubt.fromMap(data);
       }).toList();
+      // Sort locally by createdAt descending
+      doubts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return doubts;
     });
   }
 
   /// STREAM: Student's own doubts (for "My Doubts" page)
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<Doubt>> studentDoubtsStream(String studentId) {
-    return _doubtsRef
-        .where('studentId', isEqualTo: studentId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _doubtsRef.snapshots().map((snapshot) {
+      final doubts = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return Doubt.fromMap(data);
-      }).toList();
+      }).where((d) => d.studentId == studentId).toList();
+      // Sort locally by createdAt descending
+      doubts.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return doubts;
     });
   }
 
@@ -224,49 +228,44 @@ class TeacherService {
   }
 
   /// STREAM: Pending submissions (for Teacher's Review Hub)
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<StudentSubmission>> pendingSubmissionsStream() {
-    return _submissionsRef
-        .where('status', isEqualTo: SubmissionStatus.pending.name)
-        .orderBy('submittedAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _submissionsRef.snapshots().map((snapshot) {
+      final submissions = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return StudentSubmission.fromMap(data);
-      }).toList();
+      }).where((s) => s.status == SubmissionStatus.pending).toList();
+      submissions.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+      return submissions;
     });
   }
 
   /// STREAM: All submissions with optional status filter
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<StudentSubmission>> submissionsStream({SubmissionStatus? status}) {
-    Query query = _submissionsRef.orderBy('submittedAt', descending: true);
-    if (status != null) {
-      query = _submissionsRef
-          .where('status', isEqualTo: status.name)
-          .orderBy('submittedAt', descending: true);
-    }
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _submissionsRef.snapshots().map((snapshot) {
+      final submissions = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return StudentSubmission.fromMap(data);
-      }).toList();
+      }).where((s) => status == null || s.status == status).toList();
+      submissions.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+      return submissions;
     });
   }
 
   /// STREAM: Student's own submissions
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<StudentSubmission>> studentSubmissionsStream(String studentId) {
-    return _submissionsRef
-        .where('studentId', isEqualTo: studentId)
-        .orderBy('submittedAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _submissionsRef.snapshots().map((snapshot) {
+      final submissions = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return StudentSubmission.fromMap(data);
-      }).toList();
+      }).where((s) => s.studentId == studentId).toList();
+      submissions.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+      return submissions;
     });
   }
 
@@ -329,36 +328,32 @@ class TeacherService {
   }
 
   /// STREAM: All active notices (for Teacher)
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<Notice>> noticesStream() {
-    return _noticesRef
-        .where('isActive', isEqualTo: true)
-        .orderBy('eventDate')
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _noticesRef.snapshots().map((snapshot) {
+      final notices = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return Notice.fromMap(data);
-      }).toList();
+      }).where((n) => n.isActive).toList();
+      notices.sort((a, b) => a.eventDate.compareTo(b.eventDate));
+      return notices;
     });
   }
 
   /// STREAM: Notices for a specific grade (for Student's Notice Tab)
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<Notice>> noticesForGradeStream(int grade) {
-    // Get notices where targetGrades is empty (all grades) or contains this grade
-    return _noticesRef
-        .where('isActive', isEqualTo: true)
-        .orderBy('eventDate')
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _noticesRef.snapshots().map((snapshot) {
+      final notices = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return Notice.fromMap(data);
       }).where((notice) {
-        // Filter: empty targetGrades means all grades, or grade must be in list
-        return notice.targetGrades.isEmpty || notice.targetGrades.contains(grade);
+        return notice.isActive && (notice.targetGrades.isEmpty || notice.targetGrades.contains(grade));
       }).toList();
+      notices.sort((a, b) => a.eventDate.compareTo(b.eventDate));
+      return notices;
     });
   }
 
@@ -425,17 +420,16 @@ class TeacherService {
   }
 
   /// STREAM: Career notes for a student (syncs to student dashboard)
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<CareerNote>> careerNotesStream(String studentId) {
-    return _careerNotesRef
-        .where('studentId', isEqualTo: studentId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _careerNotesRef.snapshots().map((snapshot) {
+      final notes = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return CareerNote.fromMap(data);
-      }).toList();
+      }).where((n) => n.studentId == studentId).toList();
+      notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return notes;
     });
   }
 
@@ -451,6 +445,28 @@ class TeacherService {
       return docRef.id;
     } catch (e) {
       debugPrint('❌ [TeacherService] Error creating quiz: $e');
+      rethrow;
+    }
+  }
+
+  /// Update a quiz
+  Future<void> updateQuiz(Quiz quiz) async {
+    try {
+      await _quizzesRef.doc(quiz.id).update(quiz.toMap());
+      debugPrint('✅ [TeacherService] Quiz updated');
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error updating quiz: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a quiz
+  Future<void> deleteQuiz(String quizId) async {
+    try {
+      await _quizzesRef.doc(quizId).delete();
+      debugPrint('✅ [TeacherService] Quiz deleted');
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error deleting quiz: $e');
       rethrow;
     }
   }
@@ -495,17 +511,16 @@ class TeacherService {
   }
 
   /// STREAM: Quiz attempts for a quiz
+  /// Note: Sorting done locally to avoid composite index requirement
   Stream<List<QuizAttempt>> quizAttemptsStream(String quizId) {
-    return _quizAttemptsRef
-        .where('quizId', isEqualTo: quizId)
-        .orderBy('attemptedAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
+    return _quizAttemptsRef.snapshots().map((snapshot) {
+      final attempts = snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return QuizAttempt.fromMap(data);
-      }).toList();
+      }).where((a) => a.quizId == quizId).toList();
+      attempts.sort((a, b) => b.attemptedAt.compareTo(a.attemptedAt));
+      return attempts;
     });
   }
 
