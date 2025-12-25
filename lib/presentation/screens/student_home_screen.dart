@@ -99,6 +99,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             NavigationDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Explore'),
             NavigationDestination(icon: Icon(Icons.quiz_outlined), selectedIcon: Icon(Icons.quiz), label: 'Quizzes'),
             NavigationDestination(icon: Icon(Icons.campaign_outlined), selectedIcon: Icon(Icons.campaign), label: 'Notices'),
+            NavigationDestination(icon: Icon(Icons.help_outline), selectedIcon: Icon(Icons.help), label: 'Doubts'),
             NavigationDestination(icon: Icon(Icons.person_outlined), selectedIcon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
@@ -928,7 +929,7 @@ class _DoubtCard extends StatelessWidget {
   }
 }
 
-/// Profile Tab - Fixed with Double-Builder Pattern & Saved Career Insights
+/// Profile Tab - Refactored with UserIdentityCard & My Career Notes
 class _ProfileTab extends StatelessWidget {
   final StudentModel? student;
   final VoidCallback onLogout;
@@ -937,89 +938,96 @@ class _ProfileTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile'), automaticallyImplyLeading: false),
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        title: const Text('Profile'),
+        automaticallyImplyLeading: false,
+        backgroundColor: const Color(0xFF003F75),
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // User Identity Card - Grouped Name, ID, Email, Grade
+            _UserIdentityCard(student: student),
             const SizedBox(height: 20),
-            // Avatar
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: const Color(0xFF003F75).withAlpha(25),
-              child: Text(
-                student?.name.isNotEmpty == true ? student!.name[0].toUpperCase() : 'S',
-                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Color(0xFF003F75)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(student?.name ?? 'Student', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF003F75).withAlpha(25),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text('Grade ${student?.grade ?? '-'}',
-                  style: const TextStyle(fontSize: 14, color: Color(0xFF003F75), fontWeight: FontWeight.w500)),
-            ),
-            const SizedBox(height: 24),
 
             // Mentor Messages Button
             if (student != null)
-              Container(
+              SizedBox(
                 width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 16),
                 child: ElevatedButton.icon(
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => MentorMessagesScreen(studentId: student!.uid)),
                   ),
-                  icon: const Icon(Icons.message),
+                  icon: const Icon(Icons.message, size: 20),
                   label: const Text('Messages from Mentor'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF003F75),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
-
-            // Profile Items
-            _ProfileItem(icon: Icons.badge, label: 'Student ID', value: student?.studentId ?? '-'),
-            _ProfileItem(icon: Icons.email, label: 'Email', value: student?.email ?? '-'),
-            _ProfileItem(icon: Icons.school, label: 'Grade', value: '${student?.grade ?? '-'}'),
             const SizedBox(height: 24),
 
-            // Saved Career Insights Section - Double-Builder Pattern
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text('📚 Saved Career Insights', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            ),
+            // My Career Notes Section - Renamed from Doubts
+            const Text('📝 My Career Notes',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF003F75))),
+            const SizedBox(height: 4),
+            Text('Your saved insights from career exploration',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600])),
             const SizedBox(height: 12),
-            _SavedNotesSection(student: student),
+            _MyCareerNotesSection(student: student),
             const SizedBox(height: 32),
 
-            // Logout Button - Constrained to max 250px, centered, surface color
+            // Logout Button - SizedBox width: 240, centered, SurfaceVariant color
             Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 250),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    onPressed: onLogout,
-                    icon: const Icon(Icons.logout, size: 20),
-                    label: const Text('Logout'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF5F7FA),
-                      foregroundColor: Colors.red.shade700,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                      side: BorderSide(color: Colors.red.shade200),
+              child: SizedBox(
+                width: 240,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        title: const Text('Logout'),
+                        content: const Text('Are you sure you want to logout?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                            child: const Text('Logout'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      // Clear Hive boxes and sign out
+                      await HiveService.clearUserData();
+                      await FirebaseAuth.instance.signOut();
+                      if (context.mounted) {
+                        context.read<ThemeProvider>().clearRole();
+                        context.go(RouteConstants.login);
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.logout, size: 20),
+                  label: const Text('Logout'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF5F7FA),
+                    foregroundColor: const Color(0xFF003F75),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Color(0xFFE0E0E0)),
                     ),
+                    elevation: 0,
                   ),
                 ),
               ),
@@ -1032,130 +1040,249 @@ class _ProfileTab extends StatelessWidget {
   }
 }
 
-/// Saved Notes Section - Double-Builder Pattern
-/// FutureBuilder<User?> wraps StreamBuilder for proper auth state
-class _SavedNotesSection extends StatelessWidget {
+/// User Identity Card - Elegant grouped card with 16px padding, elevation: 2
+class _UserIdentityCard extends StatelessWidget {
   final StudentModel? student;
-  const _SavedNotesSection({required this.student});
+  const _UserIdentityCard({required this.student});
 
   @override
   Widget build(BuildContext context) {
-    // Double-Builder Pattern: FutureBuilder waits for FirebaseAuth.currentUser
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Avatar
+            CircleAvatar(
+              radius: 40,
+              backgroundColor: const Color(0xFF003F75).withAlpha(30),
+              child: Text(
+                student?.name.isNotEmpty == true ? student!.name[0].toUpperCase() : 'S',
+                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF003F75)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Name
+            Text(student?.name ?? 'Student',
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            // Grade Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0FACB0).withAlpha(30),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text('Grade ${student?.grade ?? '-'}',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF0FACB0), fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
+            // Info Rows
+            _InfoRow(icon: Icons.badge_outlined, label: 'Student ID', value: student?.studentId ?? '-'),
+            const SizedBox(height: 10),
+            _InfoRow(icon: Icons.email_outlined, label: 'Email', value: student?.email ?? '-'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _InfoRow({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.grey[600]),
+        const SizedBox(width: 10),
+        Text('$label: ', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+        Expanded(
+          child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
+}
+
+/// My Career Notes Section - Double-Builder Pattern with Delete
+class _MyCareerNotesSection extends StatelessWidget {
+  final StudentModel? student;
+  const _MyCareerNotesSection({required this.student});
+
+  @override
+  Widget build(BuildContext context) {
+    // Double-Builder: FutureBuilder for auth, StreamBuilder for notes
     return FutureBuilder<User?>(
       future: Future.value(FirebaseAuth.instance.currentUser),
       builder: (context, authSnapshot) {
         if (authSnapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
         }
 
         final user = authSnapshot.data;
         if (user == null) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text('Please login to view saved notes'),
-          );
+          return _EmptyNotesCard(message: 'Please login to view your notes');
         }
 
         final noteService = NoteService();
 
-        // StreamBuilder listens to users/{userId}/my_notes
+        // StreamBuilder: users/{userId}/my_notes
         return StreamBuilder<List<NoteModel>>(
           stream: noteService.userNotesStream(user.uid),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
             }
 
             if (snapshot.hasError) {
-              return Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withAlpha(25),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
-              );
+              return _EmptyNotesCard(message: 'Error loading notes: ${snapshot.error}');
             }
 
             final notes = snapshot.data ?? [];
 
             if (notes.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF5F7FA),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.note_alt_outlined, size: 48, color: Colors.grey[400]),
-                    const SizedBox(height: 12),
-                    const Text('No saved insights yet', style: TextStyle(fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    Text('Explore careers and save your notes!', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                  ],
-                ),
-              );
+              return const _EmptyNotesCard(message: 'No career notes yet.\nExplore careers and save your insights!');
             }
 
-            // Display notes using ListView.separated
+            // Display notes with Material 3 Card style
             return ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: notes.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, index) => _SavedNoteCard(note: notes[index]),
+              itemBuilder: (context, index) => _CareerNoteCard(
+                note: notes[index],
+                onDelete: () => _confirmDelete(context, noteService, user.uid, notes[index]),
+              ),
             );
           },
         );
       },
     );
   }
+
+  void _confirmDelete(BuildContext context, NoteService service, String oderId, NoteModel note) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Note'),
+        content: Text('Delete your note about "${note.careerTitle}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              service.deleteNote(oderId, note.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Note deleted'), backgroundColor: Color(0xFF003F75)),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-/// Saved Note Card for Profile Screen
-class _SavedNoteCard extends StatelessWidget {
-  final NoteModel note;
-  const _SavedNoteCard({required this.note});
+class _EmptyNotesCard extends StatelessWidget {
+  final String message;
+  const _EmptyNotesCard({required this.message});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFF5F7FA),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 6, offset: const Offset(0, 2))],
+        side: BorderSide(color: Colors.grey.shade300),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0FACB0).withAlpha(25),
-                  borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(Icons.note_alt_outlined, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Career Note Card - Material 3 style with careerTitle badge and delete
+class _CareerNoteCard extends StatelessWidget {
+  final NoteModel note;
+  final VoidCallback onDelete;
+  const _CareerNoteCard({required this.note, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: Career Title Badge + Delete Icon
+            Row(
+              children: [
+                // Career Title Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0FACB0).withAlpha(30),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.work_outline, size: 14, color: Color(0xFF0FACB0)),
+                      const SizedBox(width: 6),
+                      Text(note.careerTitle,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF0FACB0))),
+                    ],
+                  ),
                 ),
-                child: const Icon(Icons.work_outline, size: 16, color: Color(0xFF0FACB0)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(note.careerTitle, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              ),
-              Text(_formatDate(note.timestamp), style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(note.noteContent, style: TextStyle(fontSize: 13, color: Colors.grey[700], height: 1.4)),
-        ],
+                const Spacer(),
+                // Timestamp
+                Text(_formatDate(note.timestamp),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                const SizedBox(width: 8),
+                // Delete Icon
+                InkWell(
+                  onTap: onDelete,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.delete_outline, size: 18, color: Colors.red[400]),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Note Content
+            Text(note.noteContent,
+                style: TextStyle(fontSize: 14, color: Colors.grey[800], height: 1.5)),
+          ],
+        ),
       ),
     );
   }

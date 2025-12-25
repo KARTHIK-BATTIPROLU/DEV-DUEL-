@@ -8,19 +8,163 @@ import '../../providers/career_provider.dart';
 import '../../services/note_service.dart';
 import 'simulation_screen.dart';
 
-/// Career Detail Screen - 5-Tab Deep Clarity View with Notes
-class CareerDetailScreen extends StatelessWidget {
+/// Career Detail Screen - 4-Tab Deep Clarity View with Sticky Note Button
+class CareerDetailScreen extends StatefulWidget {
   final CareerModel career;
   const CareerDetailScreen({super.key, required this.career});
 
   @override
+  State<CareerDetailScreen> createState() => _CareerDetailScreenState();
+}
+
+class _CareerDetailScreenState extends State<CareerDetailScreen> {
+  final _noteService = NoteService();
+  final _noteController = TextEditingController();
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  /// Show Modal Bottom Sheet to add a note
+  void _showStickyNoteSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          left: 20, right: 20, top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0FACB0).withAlpha(30),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.sticky_note_2, color: Color(0xFF0FACB0)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Add Note', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      Text(widget.career.title, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _noteController,
+              maxLines: 5,
+              decoration: InputDecoration(
+                hintText: 'Write your career insight...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                filled: true,
+                fillColor: Colors.grey[50],
+              ),
+              textCapitalization: TextCapitalization.sentences,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _saveNote,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF003F75),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _isSaving
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Save Note'),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Save note to Firestore with ServerTimestamp
+  Future<void> _saveNote() async {
+    final content = _noteController.text.trim();
+    if (content.isEmpty) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to save notes'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final note = NoteModel(
+        id: '',
+        oderId: user.uid,
+        careerId: widget.career.id,
+        careerTitle: widget.career.title,
+        noteContent: content,
+      );
+
+      await _noteService.saveNote(note);
+      _noteController.clear();
+
+      if (mounted) {
+        Navigator.pop(context); // Close bottom sheet
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.cloud_done, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Note saved & synced offline'),
+              ],
+            ),
+            backgroundColor: const Color(0xFF003F75),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(career.title),
-          backgroundColor: _getStreamColor(career.streamTag),
+          title: Text(widget.career.title),
+          backgroundColor: _getStreamColor(widget.career.streamTag),
           foregroundColor: Colors.white,
           bottom: const TabBar(
             isScrollable: true,
@@ -32,26 +176,59 @@ class CareerDetailScreen extends StatelessWidget {
               Tab(icon: Icon(Icons.timeline), text: 'Roadmap'),
               Tab(icon: Icon(Icons.analytics), text: 'Reality'),
               Tab(icon: Icon(Icons.library_books), text: 'Resources'),
-              Tab(icon: Icon(Icons.note_add), text: 'My Notes'),
             ],
           ),
         ),
         body: TabBarView(
           children: [
-            _DiscoveryTab(career: career),
-            _RoadmapTab(career: career),
-            _RealityTab(career: career),
-            _ResourcesTab(career: career),
-            _NotesTab(career: career),
+            _DiscoveryTab(career: widget.career),
+            _RoadmapTab(career: widget.career),
+            _RealityTab(career: widget.career),
+            _ResourcesTab(career: widget.career),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => Navigator.push(context, MaterialPageRoute(
-            builder: (_) => SimulationScreen(career: career),
-          )),
-          backgroundColor: _getStreamColor(career.streamTag),
-          icon: const Icon(Icons.play_arrow),
-          label: const Text('Try Reality Task'),
+        // Bottom bar with Sticky Note button and Reality Task button
+        bottomNavigationBar: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [BoxShadow(color: Colors.black.withAlpha(20), blurRadius: 10, offset: const Offset(0, -2))],
+          ),
+          child: Row(
+            children: [
+              // Sticky Note Button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _showStickyNoteSheet,
+                  icon: const Icon(Icons.sticky_note_2, size: 20),
+                  label: const Text('Add Note'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0FACB0),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Reality Task Button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => SimulationScreen(career: widget.career),
+                  )),
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text('Reality Task'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _getStreamColor(widget.career.streamTag),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
