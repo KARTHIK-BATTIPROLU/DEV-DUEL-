@@ -1,6 +1,10 @@
 # Career Compass - Online Learning App
+## Project Description
+Career Compass is a sophisticated Flutter application designed to bridge the informational gap between classroom learning and professional success. By leveraging a grade-adaptive UI, the app tailors its experience to the specific developmental needs of students across three distinct phases: Discovery (Grades 7-8), Bridge (Grades 9-10), and Execution (Grades 11-12). This ensures that guidance is always age-appropriate and actionable.
 
-A comprehensive Flutter application for career guidance and online education, featuring Firebase integration, grade-adaptive UI, and offline-first architecture.
+Built with a robust Firebase backend and a Hive-powered offline-first architecture, Career Compass provides uninterrupted access to extensive career repositories, stream-specific roadmaps (MPC, BiPC, etc.), and "Reality Checks" that offer honest insights into professional life. The platform fosters a collaborative ecosystem through a dedicated Teacher Command Center, real-time notice boards, and a mentorship-driven doubt-resolution system.
+
+With integrated career aptitude quizzes and personal insight tracking, the app empowers students to move beyond academic requirements toward intentional career choices. Whether online or offline, it serves as a persistent digital mentor, helping students explore their potential, visualize their roadmap, and execute their professional goals with confidence and clarity.
 
 ## 📱 Features
 
