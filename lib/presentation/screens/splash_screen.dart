@@ -7,8 +7,7 @@ import '../../services/auth_service.dart';
 import '../../services/hive_service.dart';
 
 /// Splash Screen
-/// Entry point of the application
-/// Checks authentication state and redirects appropriately
+/// Entry point - checks auth and routes by role
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,7 +32,6 @@ class _SplashScreenState extends State<SplashScreen>
     _checkAuthState();
   }
 
-  /// Initialize splash screen animations
   void _initAnimations() {
     _animationController = AnimationController(
       vsync: this,
@@ -57,74 +55,50 @@ class _SplashScreenState extends State<SplashScreen>
     _animationController.forward();
   }
 
-  /// Check Firebase auth state and redirect based on user role
-  /// Handles offline scenarios and session validation
   Future<void> _checkAuthState() async {
     try {
-      // Small delay for splash screen visibility
       await Future.delayed(const Duration(seconds: 2));
 
       final authService = AuthService();
 
-      // Check if user is authenticated with Firebase
       if (authService.isAuthenticated) {
-        // Validate session is still valid (handles expired tokens)
         final isSessionValid = await authService.isSessionValid();
-        
+
         if (!isSessionValid) {
-          // Session expired - clear local data and redirect to login
           await authService.signOut();
           if (mounted) context.go(RouteConstants.login);
           return;
         }
 
-        // User is logged in - check role from Hive (offline-first)
-        String? userRole = HiveService.getUserRole();
-
-        // If role not in cache, fetch from Firestore
-        if (userRole == null) {
-          final user = await authService.getCurrentUserWithProfile();
-          userRole = user?.role;
-        }
+        final userRole = HiveService.getUserRole();
 
         if (!mounted) return;
 
-        // Navigate based on user role
         if (userRole == AppConstants.roleStudent) {
-          context.go(RouteConstants.studentDashboard);
+          context.go(RouteConstants.studentHome);
         } else if (userRole == AppConstants.roleTeacher) {
-          context.go(RouteConstants.teacherDashboard);
+          context.go(RouteConstants.teacherHome);
         } else {
-          // Role not found - sign out and go to login
           await authService.signOut();
           if (mounted) context.go(RouteConstants.login);
         }
       } else {
-        // Check if we have cached data (offline scenario)
-        final cachedRole = HiveService.getUserRole();
-        final isLoggedIn = HiveService.isLoggedIn();
-        
-        if (isLoggedIn && cachedRole != null) {
-          // User was logged in but Firebase session expired
-          // Clear stale data and redirect to login
+        if (HiveService.isLoggedIn()) {
           await HiveService.clearUserData();
         }
-        
-        // User not logged in - navigate to login
         if (mounted) context.go(RouteConstants.login);
       }
     } catch (e) {
-      debugPrint('Splash screen error: $e');
+      debugPrint('Splash error: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = 'Failed to initialize app. Please try again.';
+          _errorMessage = 'Failed to initialize. Please try again.';
         });
       }
     }
   }
 
-  /// Retry initialization on error
   void _retryInit() {
     setState(() {
       _isLoading = true;
@@ -139,6 +113,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -149,10 +124,7 @@ class _SplashScreenState extends State<SplashScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppTheme.primaryColor,
-              AppTheme.primaryDark,
-            ],
+            colors: [AppTheme.primaryColor, AppTheme.primaryDark],
           ),
         ),
         child: SafeArea(
@@ -177,7 +149,6 @@ class _SplashScreenState extends State<SplashScreen>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // App Logo
         Container(
           width: 120,
           height: 120,
@@ -193,14 +164,12 @@ class _SplashScreenState extends State<SplashScreen>
             ],
           ),
           child: const Icon(
-            Icons.school_rounded,
+            Icons.explore_rounded,
             size: 70,
             color: AppTheme.primaryColor,
           ),
         ),
         const SizedBox(height: 32),
-
-        // App Name
         const Text(
           AppConstants.appName,
           style: TextStyle(
@@ -211,10 +180,8 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
         const SizedBox(height: 8),
-
-        // Tagline
         Text(
-          'Learn Anytime, Anywhere',
+          AppConstants.appTagline,
           style: TextStyle(
             fontSize: 16,
             color: Colors.white.withOpacity(0.9),
@@ -222,8 +189,6 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
         const SizedBox(height: 60),
-
-        // Loading or Error State
         if (_isLoading) ...[
           const SizedBox(
             width: 40,
@@ -242,21 +207,14 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           ),
         ] else if (_errorMessage != null) ...[
-          const Icon(
-            Icons.error_outline,
-            color: Colors.white,
-            size: 48,
-          ),
+          const Icon(Icons.error_outline, color: Colors.white, size: 48),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
               _errorMessage!,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
           const SizedBox(height: 24),

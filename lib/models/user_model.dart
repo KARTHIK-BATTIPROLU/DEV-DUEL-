@@ -1,7 +1,7 @@
-/// User Model
-/// Represents a user in the application (Student or Teacher)
+/// Base User Model
+/// Represents common user properties
 
-class UserModel {
+abstract class UserModel {
   final String uid;
   final String name;
   final String email;
@@ -16,20 +16,97 @@ class UserModel {
     this.createdAt,
   });
 
-  /// Create UserModel from Firestore document map
-  factory UserModel.fromMap(Map<String, dynamic> map) {
-    return UserModel(
+  Map<String, dynamic> toMap();
+}
+
+/// Student Model
+/// Represents a student user (Grade 7-12)
+
+class StudentModel extends UserModel {
+  final int grade;
+  final String studentId;
+
+  StudentModel({
+    required super.uid,
+    required super.name,
+    required super.email,
+    required this.grade,
+    required this.studentId,
+    super.createdAt,
+  }) : super(role: 'student');
+
+  factory StudentModel.fromMap(Map<String, dynamic> map) {
+    return StudentModel(
       uid: map['uid'] ?? '',
       name: map['name'] ?? '',
       email: map['email'] ?? '',
-      role: map['role'] ?? '',
+      grade: map['grade'] ?? 7,
+      studentId: map['studentId'] ?? '',
       createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'].toString())
+          ? (map['createdAt'] is DateTime
+              ? map['createdAt']
+              : DateTime.tryParse(map['createdAt'].toString()))
           : null,
     );
   }
 
-  /// Convert UserModel to map for Firestore
+  @override
+  Map<String, dynamic> toMap() {
+    return {
+      'uid': uid,
+      'name': name,
+      'email': email,
+      'grade': grade,
+      'studentId': studentId,
+      'role': role,
+      'createdAt': createdAt?.toIso8601String(),
+    };
+  }
+
+  StudentModel copyWith({
+    String? uid,
+    String? name,
+    String? email,
+    int? grade,
+    String? studentId,
+    DateTime? createdAt,
+  }) {
+    return StudentModel(
+      uid: uid ?? this.uid,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      grade: grade ?? this.grade,
+      studentId: studentId ?? this.studentId,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+}
+
+/// Teacher Model
+/// Represents a teacher/mentor user
+
+class TeacherModel extends UserModel {
+  TeacherModel({
+    required super.uid,
+    required super.name,
+    required super.email,
+    super.createdAt,
+  }) : super(role: 'teacher');
+
+  factory TeacherModel.fromMap(Map<String, dynamic> map) {
+    return TeacherModel(
+      uid: map['uid'] ?? '',
+      name: map['name'] ?? '',
+      email: map['email'] ?? '',
+      createdAt: map['createdAt'] != null
+          ? (map['createdAt'] is DateTime
+              ? map['createdAt']
+              : DateTime.tryParse(map['createdAt'].toString()))
+          : null,
+    );
+  }
+
+  @override
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,
@@ -40,19 +117,16 @@ class UserModel {
     };
   }
 
-  /// Create a copy with updated fields
-  UserModel copyWith({
+  TeacherModel copyWith({
     String? uid,
     String? name,
     String? email,
-    String? role,
     DateTime? createdAt,
   }) {
-    return UserModel(
+    return TeacherModel(
       uid: uid ?? this.uid,
       name: name ?? this.name,
       email: email ?? this.email,
-      role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
     );
   }

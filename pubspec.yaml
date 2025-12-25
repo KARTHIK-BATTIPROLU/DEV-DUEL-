@@ -49,6 +49,12 @@ dependencies:
   
   # State Management & Utils
   provider: ^6.1.2
+  
+  # URL Launcher
+  url_launcher: ^6.2.5
+  
+  # Charts (for salary visualization)
+  fl_chart: ^0.68.0
 
 dev_dependencies:
   flutter_test:

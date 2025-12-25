@@ -5,13 +5,13 @@ import '../../core/constants/app_constants.dart';
 import '../../core/constants/route_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/validators.dart';
+import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/loading_button.dart';
 
 /// Login Screen
-/// Handles user authentication with email and password
-/// Redirects to appropriate dashboard based on user role
+/// Handles authentication and routes by role
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,15 +37,11 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  /// Handle login button press
   Future<void> _handleLogin() async {
-    // Validate form
     if (!_formKey.currentState!.validate()) return;
-
-    // Prevent double-tap
     if (_isLoading) return;
 
-    debugPrint('🔐 [LoginScreen] Login button pressed');
+    debugPrint('🔐 [LoginScreen] Login attempt');
 
     setState(() {
       _isLoading = true;
@@ -53,53 +49,34 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      debugPrint('🔐 [LoginScreen] Calling authService.loginWithEmailAndPassword...');
-      // Attempt login
-      final user = await _authService.loginWithEmailAndPassword(
+      final user = await _authService.login(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
-      debugPrint('🔐 [LoginScreen] Login successful, user role: ${user.role}');
+      debugPrint('🔐 [LoginScreen] Login successful, role: ${user.role}');
 
-      if (!mounted) {
-        debugPrint('⚠️ [LoginScreen] Widget not mounted after login');
-        return;
-      }
+      if (!mounted) return;
 
-      // Navigate based on user role
-      debugPrint('🔐 [LoginScreen] Navigating to dashboard...');
-      if (user.role == AppConstants.roleStudent) {
-        context.go(RouteConstants.studentDashboard);
-      } else if (user.role == AppConstants.roleTeacher) {
-        context.go(RouteConstants.teacherDashboard);
+      if (user is StudentModel) {
+        context.go(RouteConstants.studentHome);
+      } else if (user is TeacherModel) {
+        context.go(RouteConstants.teacherHome);
       } else {
-        // Fallback for unknown role
-        debugPrint('⚠️ [LoginScreen] Unknown role: ${user.role}, defaulting to student');
-        context.go(RouteConstants.studentDashboard);
+        context.go(RouteConstants.studentHome);
       }
-    } catch (e, stackTrace) {
-      debugPrint('❌ [LoginScreen] Login error: $e');
-      debugPrint('❌ [LoginScreen] Stack trace: $stackTrace');
+    } catch (e) {
+      debugPrint('❌ [LoginScreen] Error: $e');
       if (mounted) {
-        setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
-        });
+        setState(() => _errorMessage = e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
-      debugPrint('🔐 [LoginScreen] Finally block - stopping loader');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Navigate to register screen
-  void _goToRegister() {
-    context.push(RouteConstants.register);
-  }
+  void _goToRegister() => context.push(RouteConstants.register);
+
 
   @override
   Widget build(BuildContext context) {
@@ -112,36 +89,25 @@ class _LoginScreenState extends State<LoginScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: isWeb ? 450 : double.infinity,
-              ),
+              constraints: BoxConstraints(maxWidth: isWeb ? 450 : double.infinity),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Logo and Welcome Text
                   _buildHeader(),
                   const SizedBox(height: 48),
-
-                  // Login Form
                   _buildLoginForm(),
                   const SizedBox(height: 24),
-
-                  // Error Message
                   if (_errorMessage != null) ...[
                     _buildErrorMessage(),
                     const SizedBox(height: 16),
                   ],
-
-                  // Login Button
                   LoadingButton(
                     text: 'Login',
                     isLoading: _isLoading,
                     onPressed: _handleLogin,
                   ),
                   const SizedBox(height: 24),
-
-                  // Register Link
                   _buildRegisterLink(),
                 ],
               ),
@@ -155,7 +121,6 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildHeader() {
     return Column(
       children: [
-        // App Logo
         Container(
           width: 80,
           height: 80,
@@ -164,14 +129,12 @@ class _LoginScreenState extends State<LoginScreen> {
             borderRadius: BorderRadius.circular(20),
           ),
           child: const Icon(
-            Icons.school_rounded,
+            Icons.explore_rounded,
             size: 48,
             color: AppTheme.primaryColor,
           ),
         ),
         const SizedBox(height: 24),
-
-        // Welcome Text
         Text(
           'Welcome Back!',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -180,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Sign in to continue learning',
+          'Sign in to continue your journey',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppTheme.textSecondary,
               ),
@@ -194,7 +157,6 @@ class _LoginScreenState extends State<LoginScreen> {
       key: _formKey,
       child: Column(
         children: [
-          // Email Field
           CustomTextField(
             controller: _emailController,
             label: 'Email',
@@ -205,8 +167,6 @@ class _LoginScreenState extends State<LoginScreen> {
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 16),
-
-          // Password Field
           CustomTextField(
             controller: _passwordController,
             label: 'Password',
@@ -221,11 +181,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 _obscurePassword ? Icons.visibility_off : Icons.visibility,
                 color: AppTheme.textSecondary,
               ),
-              onPressed: () {
-                setState(() {
-                  _obscurePassword = !_obscurePassword;
-                });
-              },
+              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
             ),
           ),
         ],
@@ -243,19 +199,12 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.error_outline,
-            color: AppTheme.errorColor,
-            size: 20,
-          ),
+          const Icon(Icons.error_outline, color: AppTheme.errorColor, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _errorMessage!,
-              style: const TextStyle(
-                color: AppTheme.errorColor,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: AppTheme.errorColor, fontSize: 14),
             ),
           ),
         ],
@@ -267,14 +216,8 @@ class _LoginScreenState extends State<LoginScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          "Don't have an account?",
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        TextButton(
-          onPressed: _goToRegister,
-          child: const Text('Register'),
-        ),
+        Text("Don't have an account?", style: Theme.of(context).textTheme.bodyMedium),
+        TextButton(onPressed: _goToRegister, child: const Text('Register')),
       ],
     );
   }

@@ -3,7 +3,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 
 /// Role Selector Widget
-/// Allows users to select between Student and Teacher roles during registration
+/// Student or Teacher selection for registration
 
 class RoleSelector extends StatelessWidget {
   final String selectedRole;
@@ -19,12 +19,11 @@ class RoleSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Student Role Option
         Expanded(
           child: _RoleCard(
             role: AppConstants.roleStudent,
             title: 'Student',
-            subtitle: 'I want to learn',
+            subtitle: 'Grade 7-12',
             icon: Icons.school_outlined,
             color: AppTheme.studentColor,
             isSelected: selectedRole == AppConstants.roleStudent,
@@ -32,14 +31,12 @@ class RoleSelector extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-
-        // Teacher Role Option
         Expanded(
           child: _RoleCard(
             role: AppConstants.roleTeacher,
             title: 'Teacher',
-            subtitle: 'I want to teach',
-            icon: Icons.cast_for_education,
+            subtitle: 'Career Mentor',
+            icon: Icons.psychology_outlined,
             color: AppTheme.teacherColor,
             isSelected: selectedRole == AppConstants.roleTeacher,
             onTap: () => onRoleChanged(AppConstants.roleTeacher),
@@ -50,7 +47,6 @@ class RoleSelector extends StatelessWidget {
   }
 }
 
-/// Individual Role Card Widget
 class _RoleCard extends StatelessWidget {
   final String role;
   final String title;
@@ -87,7 +83,6 @@ class _RoleCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            // Selection Indicator
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -104,26 +99,18 @@ class _RoleCard extends StatelessWidget {
                     ),
                   ),
                   child: isSelected
-                      ? const Icon(
-                          Icons.check,
-                          size: 14,
-                          color: Colors.white,
-                        )
+                      ? const Icon(Icons.check, size: 14, color: Colors.white)
                       : null,
                 ),
               ],
             ),
             const SizedBox(height: 8),
-
-            // Icon
             Icon(
               icon,
               size: 40,
               color: isSelected ? color : Colors.grey.shade400,
             ),
             const SizedBox(height: 12),
-
-            // Title
             Text(
               title,
               style: TextStyle(
@@ -133,8 +120,6 @@ class _RoleCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-
-            // Subtitle
             Text(
               subtitle,
               style: TextStyle(

@@ -11,8 +11,7 @@ import '../widgets/loading_button.dart';
 import '../widgets/role_selector.dart';
 
 /// Register Screen
-/// Handles new user registration with role selection
-/// Creates user in Firebase Auth and Firestore
+/// Handles student and teacher registration
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -27,12 +26,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _studentIdController = TextEditingController();
   final _authService = AuthService();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   String _selectedRole = AppConstants.roleStudent;
+  int _selectedGrade = 7;
   String? _errorMessage;
 
   @override
@@ -41,18 +42,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _studentIdController.dispose();
     super.dispose();
   }
 
-  /// Handle registration button press
   Future<void> _handleRegister() async {
-    // Validate form
     if (!_formKey.currentState!.validate()) return;
-
-    // Prevent double-tap
     if (_isLoading) return;
 
-    debugPrint('📝 [RegisterScreen] Register button pressed');
+    // Additional validation for students
+    if (_selectedRole == AppConstants.roleStudent) {
+      if (_studentIdController.text.trim().isEmpty) {
+        setState(() => _errorMessage = AppConstants.errorEmptyStudentId);
+        return;
+      }
+    }
+
+    debugPrint('📝 [RegisterScreen] Registering as $_selectedRole');
 
     setState(() {
       _isLoading = true;
@@ -60,55 +66,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      debugPrint('📝 [RegisterScreen] Calling authService.registerWithEmailAndPassword...');
-      // Register user
-      final user = await _authService.registerWithEmailAndPassword(
-        name: _nameController.text.trim(),
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        role: _selectedRole,
-      );
-
-      debugPrint('📝 [RegisterScreen] Registration successful, user role: ${user.role}');
-
-      if (!mounted) {
-        debugPrint('⚠️ [RegisterScreen] Widget not mounted after registration');
-        return;
-      }
-
-      // Navigate based on user role
-      debugPrint('📝 [RegisterScreen] Navigating to dashboard...');
-      if (user.role == AppConstants.roleStudent) {
-        context.go(RouteConstants.studentDashboard);
-      } else if (user.role == AppConstants.roleTeacher) {
-        context.go(RouteConstants.teacherDashboard);
+      if (_selectedRole == AppConstants.roleStudent) {
+        await _authService.registerStudent(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          grade: _selectedGrade,
+          studentId: _studentIdController.text.trim(),
+        );
+        if (mounted) context.go(RouteConstants.studentHome);
       } else {
-        // Fallback for unknown role
-        debugPrint('⚠️ [RegisterScreen] Unknown role: ${user.role}, defaulting to student');
-        context.go(RouteConstants.studentDashboard);
+        await _authService.registerTeacher(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+        if (mounted) context.go(RouteConstants.teacherHome);
       }
-    } catch (e, stackTrace) {
-      debugPrint('❌ [RegisterScreen] Registration error: $e');
-      debugPrint('❌ [RegisterScreen] Stack trace: $stackTrace');
+    } catch (e) {
+      debugPrint('❌ [RegisterScreen] Error: $e');
       if (mounted) {
-        setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
-        });
+        setState(() => _errorMessage = e.toString().replaceAll('Exception: ', ''));
       }
     } finally {
-      debugPrint('📝 [RegisterScreen] Finally block - stopping loader');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Navigate back to login screen
-  void _goToLogin() {
-    context.pop();
-  }
+  void _goToLogin() => context.pop();
+
 
   @override
   Widget build(BuildContext context) {
@@ -128,40 +114,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: isWeb ? 450 : double.infinity,
-              ),
+              constraints: BoxConstraints(maxWidth: isWeb ? 450 : double.infinity),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Header
                   _buildHeader(),
                   const SizedBox(height: 32),
-
-                  // Registration Form
-                  _buildRegistrationForm(),
-                  const SizedBox(height: 24),
-
-                  // Role Selector
                   _buildRoleSelector(),
                   const SizedBox(height: 24),
-
-                  // Error Message
+                  _buildRegistrationForm(),
+                  const SizedBox(height: 24),
                   if (_errorMessage != null) ...[
                     _buildErrorMessage(),
                     const SizedBox(height: 16),
                   ],
-
-                  // Register Button
                   LoadingButton(
                     text: 'Create Account',
                     isLoading: _isLoading,
                     onPressed: _handleRegister,
                   ),
                   const SizedBox(height: 24),
-
-                  // Login Link
                   _buildLoginLink(),
                 ],
               ),
@@ -176,104 +148,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       children: [
         Text(
-          'Join Us Today!',
+          'Join Career Compass',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
         ),
         const SizedBox(height: 8),
         Text(
-          'Create your account to start learning',
+          'Start your career discovery journey',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppTheme.textSecondary,
               ),
         ),
       ],
-    );
-  }
-
-  Widget _buildRegistrationForm() {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          // Name Field
-          CustomTextField(
-            controller: _nameController,
-            label: 'Full Name',
-            hint: 'Enter your full name',
-            prefixIcon: Icons.person_outlined,
-            keyboardType: TextInputType.name,
-            validator: Validators.validateName,
-            textInputAction: TextInputAction.next,
-            textCapitalization: TextCapitalization.words,
-          ),
-          const SizedBox(height: 16),
-
-          // Email Field
-          CustomTextField(
-            controller: _emailController,
-            label: 'Email',
-            hint: 'Enter your email',
-            prefixIcon: Icons.email_outlined,
-            keyboardType: TextInputType.emailAddress,
-            validator: Validators.validateEmail,
-            textInputAction: TextInputAction.next,
-          ),
-          const SizedBox(height: 16),
-
-          // Password Field
-          CustomTextField(
-            controller: _passwordController,
-            label: 'Password',
-            hint: 'Create a password',
-            prefixIcon: Icons.lock_outlined,
-            obscureText: _obscurePassword,
-            validator: Validators.validatePassword,
-            textInputAction: TextInputAction.next,
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                color: AppTheme.textSecondary,
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscurePassword = !_obscurePassword;
-                });
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Confirm Password Field
-          CustomTextField(
-            controller: _confirmPasswordController,
-            label: 'Confirm Password',
-            hint: 'Confirm your password',
-            prefixIcon: Icons.lock_outlined,
-            obscureText: _obscureConfirmPassword,
-            validator: (value) => Validators.validateConfirmPassword(
-              value,
-              _passwordController.text,
-            ),
-            textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _handleRegister(),
-            suffixIcon: IconButton(
-              icon: Icon(
-                _obscureConfirmPassword
-                    ? Icons.visibility_off
-                    : Icons.visibility,
-                color: AppTheme.textSecondary,
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscureConfirmPassword = !_obscureConfirmPassword;
-                });
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -293,8 +180,135 @@ class _RegisterScreenState extends State<RegisterScreen> {
           onRoleChanged: (role) {
             setState(() {
               _selectedRole = role;
+              _errorMessage = null;
             });
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRegistrationForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          CustomTextField(
+            controller: _nameController,
+            label: 'Full Name',
+            hint: 'Enter your full name',
+            prefixIcon: Icons.person_outlined,
+            keyboardType: TextInputType.name,
+            validator: Validators.validateName,
+            textInputAction: TextInputAction.next,
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 16),
+          CustomTextField(
+            controller: _emailController,
+            label: 'Email',
+            hint: 'Enter your email',
+            prefixIcon: Icons.email_outlined,
+            keyboardType: TextInputType.emailAddress,
+            validator: Validators.validateEmail,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 16),
+
+          // Student-specific fields
+          if (_selectedRole == AppConstants.roleStudent) ...[
+            _buildGradeSelector(),
+            const SizedBox(height: 16),
+            CustomTextField(
+              controller: _studentIdController,
+              label: 'Student ID / Roll Number',
+              hint: 'Enter your student ID',
+              prefixIcon: Icons.badge_outlined,
+              keyboardType: TextInputType.text,
+              validator: (value) => Validators.validateRequired(value, 'Student ID'),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          CustomTextField(
+            controller: _passwordController,
+            label: 'Password',
+            hint: 'Create a password',
+            prefixIcon: Icons.lock_outlined,
+            obscureText: _obscurePassword,
+            validator: Validators.validatePassword,
+            textInputAction: TextInputAction.next,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                color: AppTheme.textSecondary,
+              ),
+              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            ),
+          ),
+          const SizedBox(height: 16),
+          CustomTextField(
+            controller: _confirmPasswordController,
+            label: 'Confirm Password',
+            hint: 'Confirm your password',
+            prefixIcon: Icons.lock_outlined,
+            obscureText: _obscureConfirmPassword,
+            validator: (value) => Validators.validateConfirmPassword(
+              value,
+              _passwordController.text,
+            ),
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _handleRegister(),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                color: AppTheme.textSecondary,
+              ),
+              onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Grade',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              value: _selectedGrade,
+              isExpanded: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              borderRadius: BorderRadius.circular(12),
+              items: AppConstants.validGrades.map((grade) {
+                return DropdownMenuItem<int>(
+                  value: grade,
+                  child: Text('Grade $grade'),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _selectedGrade = value);
+                }
+              },
+            ),
+          ),
         ),
       ],
     );
@@ -310,19 +324,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.error_outline,
-            color: AppTheme.errorColor,
-            size: 20,
-          ),
+          const Icon(Icons.error_outline, color: AppTheme.errorColor, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _errorMessage!,
-              style: const TextStyle(
-                color: AppTheme.errorColor,
-                fontSize: 14,
-              ),
+              style: const TextStyle(color: AppTheme.errorColor, fontSize: 14),
             ),
           ),
         ],
@@ -334,14 +341,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          'Already have an account?',
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-        TextButton(
-          onPressed: _goToLogin,
-          child: const Text('Login'),
-        ),
+        Text('Already have an account?', style: Theme.of(context).textTheme.bodyMedium),
+        TextButton(onPressed: _goToLogin, child: const Text('Login')),
       ],
     );
   }
