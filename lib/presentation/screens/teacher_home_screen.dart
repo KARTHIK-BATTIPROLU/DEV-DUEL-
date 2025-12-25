@@ -7,6 +7,7 @@ import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/hive_service.dart';
 import 'class_students_screen.dart';
+import 'teacher_command_center.dart';
 
 /// Teacher Home Screen
 /// Shows students grouped by grade (7-12)
@@ -65,6 +66,13 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     }
   }
 
+  void _openCommandCenter() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const TeacherCommandCenter()),
+    );
+  }
+
   Map<int, List<StudentModel>> _groupStudentsByGrade() {
     final grouped = <int, List<StudentModel>>{};
     for (final grade in AppConstants.validGrades) {
@@ -81,6 +89,11 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
         title: const Text('Career Compass'),
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.dashboard),
+            tooltip: 'Command Center',
+            onPressed: _openCommandCenter,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
@@ -102,6 +115,8 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildWelcomeCard(),
+                    const SizedBox(height: 16),
+                    _buildCommandCenterButton(),
                     const SizedBox(height: 24),
                     _buildStatsRow(),
                     const SizedBox(height: 24),
@@ -110,6 +125,61 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildCommandCenterButton() {
+    return GestureDetector(
+      onTap: _openCommandCenter,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.indigo.shade600, Colors.purple.shade600],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.indigo.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.dashboard, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Command Center',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Manage careers, quizzes, notices & more',
+                    style: TextStyle(fontSize: 13, color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 18),
+          ],
+        ),
+      ),
     );
   }
 
