@@ -24,6 +24,7 @@ class TeacherService {
   CollectionReference get _quizAttemptsRef => _firestore.collection('quiz_attempts');
   CollectionReference get _studentActivityRef => _firestore.collection('student_activity');
   CollectionReference get _doubtsRef => _firestore.collection('doubts');
+  CollectionReference get _resourcesRef => _firestore.collection('resources');
 
   // ============================================================
   // CAREER FACTORY - REACTIVE CRUD
@@ -594,4 +595,115 @@ class TeacherService {
   // ============================================================
 
   String generateId() => _firestore.collection('_').doc().id;
+
+  // ============================================================
+  // ROADMAP BUILDER - REACTIVE
+  // ============================================================
+
+  /// Update roadmap steps for a career
+  Future<void> updateCareerRoadmap(String careerId, List<RoadmapNode> nodes) async {
+    debugPrint('🗺️ [TeacherService] Updating roadmap for career: $careerId');
+    try {
+      await _careersRef.doc(careerId).update({
+        'roadmap': CareerRoadmap(nodes: nodes).toMap(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+      debugPrint('✅ [TeacherService] Roadmap updated - students will see changes instantly');
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error updating roadmap: $e');
+      rethrow;
+    }
+  }
+
+  /// Get roadmap for a specific career
+  Future<CareerRoadmap?> getCareerRoadmap(String careerId) async {
+    try {
+      final doc = await _careersRef.doc(careerId).get();
+      if (!doc.exists) return null;
+      final data = doc.data() as Map<String, dynamic>;
+      return CareerRoadmap.fromMap(data['roadmap'] ?? {});
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error getting roadmap: $e');
+      return null;
+    }
+  }
+
+  // ============================================================
+  // RESOURCE LIBRARY - REACTIVE
+  // ============================================================
+
+  /// Create a resource
+  Future<String> createResource(Resource resource) async {
+    debugPrint('📚 [TeacherService] Creating resource: ${resource.title}');
+    try {
+      final docRef = await _resourcesRef.add(resource.toMap());
+      await docRef.update({'id': docRef.id});
+      debugPrint('✅ [TeacherService] Resource created: ${docRef.id}');
+      return docRef.id;
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error creating resource: $e');
+      rethrow;
+    }
+  }
+
+  /// Update a resource
+  Future<void> updateResource(String resourceId, Map<String, dynamic> updates) async {
+    try {
+      updates['updatedAt'] = DateTime.now().toIso8601String();
+      await _resourcesRef.doc(resourceId).update(updates);
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error updating resource: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete a resource
+  Future<void> deleteResource(String resourceId) async {
+    try {
+      await _resourcesRef.doc(resourceId).delete();
+      debugPrint('✅ [TeacherService] Resource deleted');
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error deleting resource: $e');
+      rethrow;
+    }
+  }
+
+  /// STREAM: All resources (for Teacher)
+  Stream<List<Resource>> resourcesStream() {
+    return _resourcesRef.snapshots().map((snapshot) {
+      final resources = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Resource.fromMap(data);
+      }).toList();
+      resources.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return resources;
+    });
+  }
+
+  /// STREAM: Resources by category
+  Stream<List<Resource>> resourcesByCategoryStream(String category) {
+    return _resourcesRef.snapshots().map((snapshot) {
+      final resources = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Resource.fromMap(data);
+      }).where((r) => r.isActive && (category == 'All' || r.category == category)).toList();
+      resources.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return resources;
+    });
+  }
+
+  /// STREAM: Active resources for students
+  Stream<List<Resource>> activeResourcesStream() {
+    return _resourcesRef.snapshots().map((snapshot) {
+      final resources = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Resource.fromMap(data);
+      }).where((r) => r.isActive).toList();
+      resources.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return resources;
+    });
+  }
 }

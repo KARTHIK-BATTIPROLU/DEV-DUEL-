@@ -6,7 +6,7 @@ import '../../providers/career_provider.dart';
 import '../../services/hive_service.dart';
 import 'career_detail_screen.dart';
 
-/// Career Explorer Screen - Grade-adaptive UI
+/// Career Explorer Screen - Grade-adaptive UI with optimized density
 class CareerExplorerScreen extends StatefulWidget {
   const CareerExplorerScreen({super.key});
 
@@ -31,7 +31,7 @@ class _CareerExplorerScreenState extends State<CareerExplorerScreen> {
     return Consumer<CareerProvider>(
       builder: (context, provider, _) {
         final uiStyle = provider.getUIStyle();
-        
+
         switch (uiStyle) {
           case 'discovery':
             return _DiscoveryUI(provider: provider);
@@ -46,6 +46,22 @@ class _CareerExplorerScreenState extends State<CareerExplorerScreen> {
 }
 
 // ============================================================
+// RESPONSIVE GRID HELPER - 2 columns for Web/Desktop
+// ============================================================
+int _getGridCrossAxisCount(BuildContext context) {
+  final width = MediaQuery.of(context).size.width;
+  if (width >= 900) return 3; // Large desktop
+  if (width >= 600) return 2; // Tablet/Small desktop
+  return 1; // Mobile - single column for list view
+}
+
+double _getGridChildAspectRatio(BuildContext context, {bool isCompact = false}) {
+  final width = MediaQuery.of(context).size.width;
+  if (width >= 600) return isCompact ? 3.5 : 2.8; // Wider cards on larger screens
+  return isCompact ? 4.0 : 3.2; // Taller cards on mobile
+}
+
+// ============================================================
 // GRADE 7-8: DISCOVERY UI - Gamified Interest Lab
 // ============================================================
 class _DiscoveryUI extends StatelessWidget {
@@ -55,23 +71,24 @@ class _DiscoveryUI extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8E1), // Warm playful background
+      backgroundColor: const Color(0xFFFFF8E1),
       appBar: AppBar(
         title: const Text('🎯 Interest Lab'),
         backgroundColor: Colors.amber,
         foregroundColor: Colors.black87,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildDiscoveryHeader(context),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             _buildStreamCards(context),
-            const SizedBox(height: 20),
-            const Text('🌟 Explore Careers', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            const Text('🌟 Explore Careers',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
             _buildCareerGrid(context),
           ],
         ),
@@ -81,17 +98,23 @@ class _DiscoveryUI extends StatelessWidget {
 
   Widget _buildDiscoveryHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Colors.orange, Colors.deepOrange]),
-        borderRadius: BorderRadius.circular(20),
+        gradient:
+            const LinearGradient(colors: [Colors.orange, Colors.deepOrange]),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
-          const Text('👋 Welcome, Explorer!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(height: 8),
-          Text('Discover what excites you. Every career is an adventure!', 
-            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.9)), textAlign: TextAlign.center),
+          const Text('👋 Welcome, Explorer!',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white)),
+          const SizedBox(height: 6),
+          Text('Discover what excites you!',
+              style: TextStyle(fontSize: 13, color: Colors.white.withAlpha(230)),
+              textAlign: TextAlign.center),
         ],
       ),
     );
@@ -102,12 +125,13 @@ class _DiscoveryUI extends StatelessWidget {
       {'tag': StreamTag.mpc, 'emoji': '🔬', 'color': Colors.blue},
       {'tag': StreamTag.bipc, 'emoji': '🧬', 'color': Colors.green},
       {'tag': StreamTag.mec, 'emoji': '💰', 'color': Colors.purple},
+      {'tag': StreamTag.cec, 'emoji': '📊', 'color': Colors.orange},
       {'tag': StreamTag.hec, 'emoji': '⚖️', 'color': Colors.indigo},
       {'tag': StreamTag.vocational, 'emoji': '🛠️', 'color': Colors.teal},
     ];
 
     return SizedBox(
-      height: 100,
+      height: 80,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: streams.length,
@@ -115,26 +139,46 @@ class _DiscoveryUI extends StatelessWidget {
           final stream = streams[index];
           final tag = stream['tag'] as StreamTag;
           final isSelected = provider.selectedStream == tag;
-          
+
           return GestureDetector(
+            // Tap to select, tap again to show all
             onTap: () => provider.filterByStream(isSelected ? null : tag),
-            child: Container(
-              width: 90,
-              margin: const EdgeInsets.only(right: 12),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 72,
+              margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
                 color: isSelected ? (stream['color'] as Color) : Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: stream['color'] as Color, width: 2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: stream['color'] as Color,
+                  width: isSelected ? 3 : 2,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: (stream['color'] as Color).withAlpha(75),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    : null,
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(stream['emoji'] as String, style: const TextStyle(fontSize: 28)),
-                  const SizedBox(height: 4),
-                  Text(tag.shortName, style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : stream['color'] as Color,
-                  )),
+                  Text(stream['emoji'] as String,
+                      style: const TextStyle(fontSize: 24)),
+                  const SizedBox(height: 2),
+                  Text(tag.shortName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected
+                            ? Colors.white
+                            : stream['color'] as Color,
+                      )),
                 ],
               ),
             ),
@@ -145,11 +189,43 @@ class _DiscoveryUI extends StatelessWidget {
   }
 
   Widget _buildCareerGrid(BuildContext context) {
+    final crossAxisCount = MediaQuery.of(context).size.width >= 600 ? 3 : 2;
+
+    // Empty state when no careers match the filter
+    if (provider.filteredCareers.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            const Text('🔍', style: TextStyle(fontSize: 48)),
+            const SizedBox(height: 12),
+            Text(
+              'No careers found for ${provider.selectedStream?.shortName ?? "this filter"}',
+              style: const TextStyle(fontSize: 14, color: Colors.brown),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () => provider.filterByStream(null),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Show All Careers'),
+            ),
+          ],
+        ),
+      );
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, childAspectRatio: 0.85, crossAxisSpacing: 12, mainAxisSpacing: 12,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: 0.95,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
       ),
       itemCount: provider.filteredCareers.length,
       itemBuilder: (context, index) {
@@ -168,41 +244,57 @@ class _DiscoveryCareerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider.value(
-          value: provider, child: CareerDetailScreen(career: career),
-        ),
-      )),
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChangeNotifierProvider.value(
+              value: provider,
+              child: CareerDetailScreen(career: career),
+            ),
+          )),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withAlpha(20),
+                blurRadius: 6,
+                offset: const Offset(0, 2))
+          ],
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: _getStreamColor(career.streamTag).withOpacity(0.1),
+                color: _getStreamColor(career.streamTag).withAlpha(25),
                 shape: BoxShape.circle,
               ),
-              child: Icon(_getCareerIcon(career.iconName), size: 36, color: _getStreamColor(career.streamTag)),
+              child: Icon(_getCareerIcon(career.iconName),
+                  size: 28, color: _getStreamColor(career.streamTag)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(career.title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text(career.title,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
             ),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: _getStreamColor(career.streamTag).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+                color: _getStreamColor(career.streamTag).withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(career.streamTag.shortName, style: TextStyle(fontSize: 10, color: _getStreamColor(career.streamTag))),
+              child: Text(career.streamTag.shortName,
+                  style: TextStyle(
+                      fontSize: 9, color: _getStreamColor(career.streamTag))),
             ),
           ],
         ),
@@ -211,9 +303,8 @@ class _DiscoveryCareerCard extends StatelessWidget {
   }
 }
 
-
 // ============================================================
-// GRADE 9-10: BRIDGE UI - Decision Matrix
+// GRADE 9-10: BRIDGE UI - Decision Matrix (OPTIMIZED)
 // ============================================================
 class _BridgeUI extends StatelessWidget {
   final CareerProvider provider;
@@ -227,22 +318,20 @@ class _BridgeUI extends StatelessWidget {
         title: const Text('Decision Matrix'),
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(icon: const Icon(Icons.compare_arrows), onPressed: () {}),
-        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildBridgeHeader(context),
-            const SizedBox(height: 20),
-            _buildStreamFilter(context),
-            const SizedBox(height: 20),
-            const Text('Compare Career Paths', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
-            _buildCareerList(context),
+            _buildStreamFilter(context),
+            const SizedBox(height: 12),
+            const Text('Compare Career Paths',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            _buildCareerGrid(context),
           ],
         ),
       ),
@@ -251,44 +340,38 @@ class _BridgeUI extends StatelessWidget {
 
   Widget _buildBridgeHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [AppTheme.primaryColor, AppTheme.primaryDark]),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('🎯 Decision Time', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(height: 8),
-          Text('Class 10 is crucial. Understand your options and choose wisely.', 
-            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.9))),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _buildStatChip('5 Streams', Icons.category),
-              const SizedBox(width: 12),
-              _buildStatChip('${provider.careers.length} Careers', Icons.work),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatChip(String text, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+            colors: [AppTheme.primaryColor, AppTheme.primaryDark]),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(text, style: const TextStyle(color: Colors.white, fontSize: 12)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('🎯 Decision Time',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+                const SizedBox(height: 4),
+                Text('Understand your options and choose wisely.',
+                    style: TextStyle(fontSize: 12, color: Colors.white.withAlpha(230))),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(50),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text('${provider.careers.length} Careers',
+                style: const TextStyle(color: Colors.white, fontSize: 11)),
+          ),
         ],
       ),
     );
@@ -300,30 +383,91 @@ class _BridgeUI extends StatelessWidget {
       child: Row(
         children: [
           _buildFilterChip('All', null, provider),
-          ...StreamTag.values.map((tag) => _buildFilterChip(tag.shortName, tag, provider)),
+          ...StreamTag.values
+              .map((tag) => _buildFilterChip(tag.shortName, tag, provider)),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChip(String label, StreamTag? tag, CareerProvider provider) {
+  /// Filter Chip with distinct primary color background when selected
+  Widget _buildFilterChip(
+      String label, StreamTag? tag, CareerProvider provider) {
     final isSelected = provider.selectedStream == tag;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        onSelected: (_) => provider.filterByStream(isSelected ? null : tag),
-        selectedColor: AppTheme.primaryColor.withOpacity(0.2),
-        checkmarkColor: AppTheme.primaryColor,
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: () => provider.filterByStream(tag),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            // Distinct primary color background when selected
+            color: isSelected ? AppTheme.primaryColor : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected ? AppTheme.primaryColor : Colors.grey.shade300,
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withAlpha(50),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              color: isSelected ? Colors.white : Colors.grey[700],
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildCareerList(BuildContext context) {
-    return ListView.builder(
+  Widget _buildCareerGrid(BuildContext context) {
+    final crossAxisCount = _getGridCrossAxisCount(context);
+    final aspectRatio = _getGridChildAspectRatio(context);
+
+    // Empty state when no careers match the filter
+    if (provider.filteredCareers.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(
+              'No careers found for ${provider.selectedStream?.shortName ?? "this filter"}',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => provider.filterByStream(null),
+              child: const Text('Show All Careers'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: aspectRatio,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
       itemCount: provider.filteredCareers.length,
       itemBuilder: (context, index) {
         final career = provider.filteredCareers[index];
@@ -333,6 +477,7 @@ class _BridgeUI extends StatelessWidget {
   }
 }
 
+/// Dense Bridge Career Card - Optimized for information density
 class _BridgeCareerCard extends StatelessWidget {
   final CareerModel career;
   final CareerProvider provider;
@@ -341,47 +486,67 @@ class _BridgeCareerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 1,
       child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(
-          builder: (_) => ChangeNotifierProvider.value(
-            value: provider, child: CareerDetailScreen(career: career),
-          ),
-        )),
-        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChangeNotifierProvider.value(
+                value: provider,
+                child: CareerDetailScreen(career: career),
+              ),
+            )),
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(10),
           child: Row(
             children: [
+              // Leading icon - 40x40
               Container(
-                padding: const EdgeInsets.all(12),
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: _getStreamColor(career.streamTag).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  color: _getStreamColor(career.streamTag).withAlpha(25),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(_getCareerIcon(career.iconName), color: _getStreamColor(career.streamTag), size: 28),
+                child: Icon(_getCareerIcon(career.iconName),
+                    color: _getStreamColor(career.streamTag), size: 20),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 10),
+              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(career.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(career.title,
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(career.bridgeContent.required11thStream,
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
-                    Text(career.bridgeContent.required11thStream, style: TextStyle(fontSize: 12, color: Colors.grey[600]), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        _buildInfoChip('Stress: ${career.realityCheck.jobStressIndex}/10', Icons.psychology),
-                        const SizedBox(width: 8),
-                        _buildInfoChip(career.realityCheck.avgSalary, Icons.currency_rupee),
+                        _buildMiniChip(
+                            '${career.realityCheck.jobStressIndex}/10',
+                            Icons.psychology),
+                        const SizedBox(width: 6),
+                        _buildMiniChip(
+                            career.realityCheck.avgSalary, Icons.currency_rupee),
                       ],
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.grey),
+              Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
             ],
           ),
         ),
@@ -389,28 +554,28 @@ class _BridgeCareerCard extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoChip(String text, IconData icon) {
+  Widget _buildMiniChip(String text, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: Colors.grey[600]),
-          const SizedBox(width: 4),
-          Text(text, style: TextStyle(fontSize: 10, color: Colors.grey[700])),
+          Icon(icon, size: 10, color: Colors.grey[600]),
+          const SizedBox(width: 2),
+          Text(text,
+              style: TextStyle(fontSize: 9, color: Colors.grey[700])),
         ],
       ),
     );
   }
 }
 
-
 // ============================================================
-// GRADE 11-12: EXECUTION UI - Execution Dashboard
+// GRADE 11-12: EXECUTION UI - Execution Dashboard (OPTIMIZED)
 // ============================================================
 class _ExecutionUI extends StatelessWidget {
   final CareerProvider provider;
@@ -426,19 +591,23 @@ class _ExecutionUI extends StatelessWidget {
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildExecutionHeader(context),
-            const SizedBox(height: 20),
-            _buildQuickStats(context),
-            const SizedBox(height: 20),
-            _buildStreamFilter(context),
-            const SizedBox(height: 20),
-            const Text('Career Paths', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
             const SizedBox(height: 12),
-            _buildCareerList(context),
+            _buildQuickStats(context),
+            const SizedBox(height: 12),
+            _buildStreamFilter(context),
+            const SizedBox(height: 12),
+            const Text('Career Paths',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white)),
+            const SizedBox(height: 8),
+            _buildCareerGrid(context),
           ],
         ),
       ),
@@ -447,25 +616,31 @@ class _ExecutionUI extends StatelessWidget {
 
   Widget _buildExecutionHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF0F3460), Color(0xFF16213E)]),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+        gradient: const LinearGradient(
+            colors: [Color(0xFF0F3460), Color(0xFF16213E)]),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.withAlpha(75)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Row(
-            children: [
-              Icon(Icons.rocket_launch, color: Colors.amber, size: 28),
-              SizedBox(width: 12),
-              Text('Execution Mode', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-            ],
+          const Icon(Icons.rocket_launch, color: Colors.amber, size: 24),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Execution Mode',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+                Text('Focus on exams & career prep.',
+                    style: TextStyle(fontSize: 11, color: Colors.white.withAlpha(200))),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          Text('Focus on entrance exams, college selection, and career preparation.', 
-            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.8))),
         ],
       ),
     );
@@ -474,29 +649,37 @@ class _ExecutionUI extends StatelessWidget {
   Widget _buildQuickStats(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _buildStatCard('Careers', '${provider.careers.length}', Icons.work, Colors.blue)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildStatCard('Streams', '5', Icons.category, Colors.green)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildStatCard('Exams', '15+', Icons.school, Colors.orange)),
+        Expanded(
+            child: _buildStatCard(
+                'Careers', '${provider.careers.length}', Icons.work, Colors.blue)),
+        const SizedBox(width: 8),
+        Expanded(
+            child:
+                _buildStatCard('Streams', '5', Icons.category, Colors.green)),
+        const SizedBox(width: 8),
+        Expanded(
+            child: _buildStatCard('Exams', '15+', Icons.school, Colors.orange)),
       ],
     );
   }
 
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFF16213E),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withAlpha(75)),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 4),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(label,
+              style: TextStyle(fontSize: 10, color: Colors.grey[400])),
         ],
       ),
     );
@@ -508,35 +691,92 @@ class _ExecutionUI extends StatelessWidget {
       child: Row(
         children: [
           _buildDarkFilterChip('All', null, provider),
-          ...StreamTag.values.map((tag) => _buildDarkFilterChip(tag.shortName, tag, provider)),
+          ...StreamTag.values
+              .map((tag) => _buildDarkFilterChip(tag.shortName, tag, provider)),
         ],
       ),
     );
   }
 
-  Widget _buildDarkFilterChip(String label, StreamTag? tag, CareerProvider provider) {
+  /// Dark theme filter chip with distinct selection state
+  Widget _buildDarkFilterChip(
+      String label, StreamTag? tag, CareerProvider provider) {
     final isSelected = provider.selectedStream == tag;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.only(right: 6),
       child: GestureDetector(
-        onTap: () => provider.filterByStream(isSelected ? null : tag),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        onTap: () => provider.filterByStream(tag),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
+            // Distinct primary color when selected
             color: isSelected ? Colors.blue : const Color(0xFF16213E),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: isSelected ? Colors.blue : Colors.grey.withOpacity(0.3)),
+            border: Border.all(
+              color: isSelected ? Colors.blue : Colors.grey.withAlpha(100),
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.blue.withAlpha(75),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                : null,
           ),
-          child: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.grey[400], fontSize: 13)),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.grey[400],
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildCareerList(BuildContext context) {
-    return ListView.builder(
+  Widget _buildCareerGrid(BuildContext context) {
+    final crossAxisCount = _getGridCrossAxisCount(context);
+    final aspectRatio = _getGridChildAspectRatio(context, isCompact: true);
+
+    // Empty state when no careers match the filter
+    if (provider.filteredCareers.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          children: [
+            Icon(Icons.search_off, size: 48, color: Colors.grey[600]),
+            const SizedBox(height: 12),
+            Text(
+              'No careers found for ${provider.selectedStream?.shortName ?? "this filter"}',
+              style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => provider.filterByStream(null),
+              style: TextButton.styleFrom(foregroundColor: Colors.blue),
+              child: const Text('Show All Careers'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: aspectRatio,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
       itemCount: provider.filteredCareers.length,
       itemBuilder: (context, index) {
         final career = provider.filteredCareers[index];
@@ -546,6 +786,7 @@ class _ExecutionUI extends StatelessWidget {
   }
 }
 
+/// Dense Execution Career Card - Optimized for information density
 class _ExecutionCareerCard extends StatelessWidget {
   final CareerModel career;
   final CareerProvider provider;
@@ -554,89 +795,94 @@ class _ExecutionCareerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final exams = career.executionContent.entranceExams;
-    
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF16213E),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.withAlpha(50)),
       ),
       child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(
-          builder: (_) => ChangeNotifierProvider.value(
-            value: provider, child: CareerDetailScreen(career: career),
-          ),
-        )),
-        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChangeNotifierProvider.value(
+                value: provider,
+                child: CareerDetailScreen(career: career),
+              ),
+            )),
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(10),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: _getStreamColor(career.streamTag).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(_getCareerIcon(career.iconName), color: _getStreamColor(career.streamTag), size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              // Leading icon - 40x40
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _getStreamColor(career.streamTag).withAlpha(50),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(_getCareerIcon(career.iconName),
+                    color: _getStreamColor(career.streamTag), size: 20),
+              ),
+              const SizedBox(width: 10),
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(career.title,
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Row(
                       children: [
-                        Text(career.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
-                        Text(career.streamTag.shortName, style: TextStyle(fontSize: 12, color: _getStreamColor(career.streamTag))),
+                        Text(career.streamTag.shortName,
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: _getStreamColor(career.streamTag))),
+                        const SizedBox(width: 8),
+                        Text(career.executionContent.financialReality.entrySalary,
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey[400])),
                       ],
                     ),
-                  ),
-                  const Icon(Icons.chevron_right, color: Colors.grey),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(color: Colors.grey, height: 1),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildDataPoint('Entry Salary', career.executionContent.financialReality.entrySalary),
-                  _buildDataPoint('5-Year', career.executionContent.financialReality.fiveYearSalary),
-                  _buildDataPoint('Exams', '${exams.length}'),
-                ],
-              ),
-              if (exams.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: exams.take(3).map((e) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(e.name, style: const TextStyle(fontSize: 10, color: Colors.blue)),
-                  )).toList(),
+                    if (exams.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 2,
+                        children: exams
+                            .take(2)
+                            .map((e) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withAlpha(50),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(e.name,
+                                      style: const TextStyle(
+                                          fontSize: 8, color: Colors.blue)),
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey[600], size: 18),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildDataPoint(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-      ],
     );
   }
 }
@@ -646,37 +892,64 @@ class _ExecutionCareerCard extends StatelessWidget {
 // ============================================================
 Color _getStreamColor(StreamTag tag) {
   switch (tag) {
-    case StreamTag.mpc: return Colors.blue;
-    case StreamTag.bipc: return Colors.green;
-    case StreamTag.mec: return Colors.purple;
-    case StreamTag.cec: return Colors.orange;
-    case StreamTag.hec: return Colors.indigo;
-    case StreamTag.vocational: return Colors.teal;
+    case StreamTag.mpc:
+      return Colors.blue;
+    case StreamTag.bipc:
+      return Colors.green;
+    case StreamTag.mec:
+      return Colors.purple;
+    case StreamTag.cec:
+      return Colors.orange;
+    case StreamTag.hec:
+      return Colors.indigo;
+    case StreamTag.vocational:
+      return Colors.teal;
   }
 }
 
 IconData _getCareerIcon(String iconName) {
   switch (iconName) {
-    case 'computer': return Icons.computer;
-    case 'medical_services': return Icons.medical_services;
-    case 'account_balance': return Icons.account_balance;
-    case 'gavel': return Icons.gavel;
-    case 'web': return Icons.web;
-    case 'rocket_launch': return Icons.rocket_launch;
-    case 'directions_boat': return Icons.directions_boat;
-    case 'architecture': return Icons.architecture;
-    case 'science': return Icons.science;
-    case 'biotech': return Icons.biotech;
-    case 'vaccines': return Icons.vaccines;
-    case 'trending_up': return Icons.trending_up;
-    case 'calculate': return Icons.calculate;
-    case 'balance': return Icons.balance;
-    case 'design_services': return Icons.design_services;
-    case 'psychology': return Icons.psychology;
-    case 'public': return Icons.public;
-    case 'engineering': return Icons.engineering;
-    case 'movie_creation': return Icons.movie_creation;
-    case 'restaurant': return Icons.restaurant;
-    default: return Icons.work;
+    case 'computer':
+      return Icons.computer;
+    case 'medical_services':
+      return Icons.medical_services;
+    case 'account_balance':
+      return Icons.account_balance;
+    case 'gavel':
+      return Icons.gavel;
+    case 'web':
+      return Icons.web;
+    case 'rocket_launch':
+      return Icons.rocket_launch;
+    case 'directions_boat':
+      return Icons.directions_boat;
+    case 'architecture':
+      return Icons.architecture;
+    case 'science':
+      return Icons.science;
+    case 'biotech':
+      return Icons.biotech;
+    case 'vaccines':
+      return Icons.vaccines;
+    case 'trending_up':
+      return Icons.trending_up;
+    case 'calculate':
+      return Icons.calculate;
+    case 'balance':
+      return Icons.balance;
+    case 'design_services':
+      return Icons.design_services;
+    case 'psychology':
+      return Icons.psychology;
+    case 'public':
+      return Icons.public;
+    case 'engineering':
+      return Icons.engineering;
+    case 'movie_creation':
+      return Icons.movie_creation;
+    case 'restaurant':
+      return Icons.restaurant;
+    default:
+      return Icons.work;
   }
 }

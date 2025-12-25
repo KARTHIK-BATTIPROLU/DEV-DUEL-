@@ -1,0 +1,117 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================
+    // USERS COLLECTION - User profiles and sub-collections
+    // ============================================================
+    match /users/{userId} {
+      // Allow read/write only to the specific userId
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // MY_NOTES SUB-COLLECTION - Career insights saved by students
+      // Path: users/{userId}/my_notes/{noteId}
+      match /my_notes/{noteId} {
+        // Allow read/write only to the owner (userId must match auth.uid)
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // ============================================================
+    // STUDENTS SUB-COLLECTION (Legacy structure)
+    // ============================================================
+    match /users/students/students/{studentId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == studentId;
+    }
+    
+    // ============================================================
+    // TEACHERS SUB-COLLECTION (Legacy structure)
+    // ============================================================
+    match /users/teachers/teachers/{teacherId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == teacherId;
+    }
+    
+    // ============================================================
+    // NOTICES COLLECTION - Public read, teacher write
+    // ============================================================
+    match /notices/{noticeId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // CAREERS COLLECTION - Public read for all authenticated users
+    // ============================================================
+    match /careers/{careerId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // DOUBTS COLLECTION - Students can create, teachers can answer
+    // ============================================================
+    match /doubts/{doubtId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+    }
+    
+    // ============================================================
+    // SUBMISSIONS COLLECTION - Student submissions
+    // ============================================================
+    match /submissions/{submissionId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // CAREER NOTES COLLECTION - Teacher notes for students
+    // ============================================================
+    match /career_notes/{noteId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // QUIZZES COLLECTION
+    // ============================================================
+    match /quizzes/{quizId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // QUIZ ATTEMPTS COLLECTION
+    // ============================================================
+    match /quiz_attempts/{attemptId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // STUDENT ACTIVITY COLLECTION
+    // ============================================================
+    match /student_activity/{activityId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // RESOURCES COLLECTION
+    // ============================================================
+    match /resources/{resourceId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // ============================================================
+    // OPPORTUNITIES COLLECTION
+    // ============================================================
+    match /opportunities/{opportunityId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}

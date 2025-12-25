@@ -14,11 +14,12 @@ import 'teacher_tabs/analytics_tab.dart';
 import 'teacher_tabs/assessment_lab_tab.dart';
 import 'teacher_tabs/roadmap_architect_tab.dart';
 import 'teacher_tabs/doubts_hub_tab.dart';
+import 'teacher_tabs/resource_manager_tab.dart';
 import 'class_students_screen.dart';
 import '../../core/constants/app_constants.dart';
 
 /// Teacher Command Center - Main hub for teacher management
-/// 8 Tabs: Students, Careers, Roadmaps, Reviews, Doubts, Notices, Quizzes, Analytics
+/// 9 Tabs: Students, Careers, Roadmaps, Resources, Reviews, Doubts, Notices, Quizzes, Analytics
 class TeacherCommandCenter extends StatefulWidget {
   const TeacherCommandCenter({super.key});
 
@@ -37,7 +38,7 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 8, vsync: this);
+    _tabController = TabController(length: 9, vsync: this);
     _loadData();
   }
 
@@ -107,6 +108,7 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
             Tab(icon: Icon(Icons.people), text: 'Students'),
             Tab(icon: Icon(Icons.work), text: 'Careers'),
             Tab(icon: Icon(Icons.route), text: 'Roadmaps'),
+            Tab(icon: Icon(Icons.library_books), text: 'Resources'),
             Tab(icon: Icon(Icons.rate_review), text: 'Reviews'),
             Tab(icon: Icon(Icons.help_center), text: 'Doubts'),
             Tab(icon: Icon(Icons.campaign), text: 'Notices'),
@@ -123,6 +125,7 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
                 _StudentsTab(students: _students, groupedStudents: _groupStudentsByGrade()),
                 const CareerFactoryTab(),
                 const RoadmapArchitectTab(),
+                const ResourceManagerTab(),
                 const ReviewHubTab(),
                 const DoubtsHubTab(),
                 const NoticeBoardTab(),

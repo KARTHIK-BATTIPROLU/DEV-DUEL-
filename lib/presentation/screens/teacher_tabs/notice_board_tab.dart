@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../models/teacher_models.dart';
-import '../../../services/teacher_service.dart';
+import '../../../models/notice_model.dart';
+import '../../../services/notice_service.dart';
 import '../../../services/hive_service.dart';
 
-/// Notice Board Tab - Manage notices and events
+/// Notice Board Tab - Teacher's Source of Truth
+/// Manages notices with persistent Firestore collection
+/// Deep Corporate Blue (#003F75) for administrative actions
 class NoticeBoardTab extends StatefulWidget {
   const NoticeBoardTab({super.key});
 
@@ -12,235 +13,207 @@ class NoticeBoardTab extends StatefulWidget {
   State<NoticeBoardTab> createState() => _NoticeBoardTabState();
 }
 
-class _NoticeBoardTabState extends State<NoticeBoardTab> with SingleTickerProviderStateMixin {
-  final _teacherService = TeacherService();
-  late TabController _tabController;
-  
-  // Sample data
-  final List<Notice> _notices = [
-    Notice(
-      id: '1',
-      title: 'Career Guidance Webinar',
-      description: 'Join us for an interactive session on choosing the right stream after 10th grade.',
-      type: NoticeType.webinar,
-      eventDate: DateTime.now().add(const Duration(days: 3)),
-      eventTime: '4:00 PM',
-      meetingLink: 'https://meet.google.com/abc-xyz',
-      targetGrades: [9, 10],
-      createdAt: DateTime.now(),
-      createdBy: 'teacher1',
-    ),
-    Notice(
-      id: '2',
-      title: 'JEE Preparation Workshop',
-      description: 'Tips and strategies for JEE Main preparation by IIT alumni.',
-      type: NoticeType.workshop,
-      eventDate: DateTime.now().add(const Duration(days: 7)),
-      eventTime: '10:00 AM',
-      targetGrades: [11, 12],
-      createdAt: DateTime.now(),
-      createdBy: 'teacher1',
-    ),
-    Notice(
-      id: '3',
-      title: 'Career Talk: Life as a Doctor',
-      description: 'Dr. Sharma from AIIMS will share insights about medical career.',
-      type: NoticeType.careerTalk,
-      eventDate: DateTime.now().add(const Duration(days: 5)),
-      eventTime: '3:00 PM',
-      targetGrades: [],
-      createdAt: DateTime.now(),
-      createdBy: 'teacher1',
-    ),
-  ];
+class _NoticeBoardTabState extends State<NoticeBoardTab> {
+  final _noticeService = NoticeService();
 
-  final List<Opportunity> _opportunities = [
-    Opportunity(
-      id: '1',
-      title: 'NTSE Scholarship',
-      description: 'National Talent Search Examination for Class 10 students.',
-      type: OpportunityType.scholarship,
-      eligibility: 'Class 10 students with 75%+ marks',
-      deadline: DateTime.now().add(const Duration(days: 30)),
-      applicationLink: 'https://ncert.nic.in/ntse',
-      targetGrades: [10],
-      createdAt: DateTime.now(),
-      createdBy: 'teacher1',
-    ),
-    Opportunity(
-      id: '2',
-      title: 'Science Olympiad',
-      description: 'National Science Olympiad for grades 7-12.',
-      type: OpportunityType.olympiad,
-      eligibility: 'All students',
-      deadline: DateTime.now().add(const Duration(days: 45)),
-      targetGrades: [7, 8, 9, 10, 11, 12],
-      createdAt: DateTime.now(),
-      createdBy: 'teacher1',
-    ),
-    Opportunity(
-      id: '3',
-      title: 'Google Summer Internship',
-      description: 'Virtual internship program for aspiring developers.',
-      type: OpportunityType.internship,
-      eligibility: 'Class 11-12 with coding knowledge',
-      deadline: DateTime.now().add(const Duration(days: 60)),
-      applicationLink: 'https://google.com/internships',
-      targetGrades: [11, 12],
-      createdAt: DateTime.now(),
-      createdBy: 'teacher1',
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
+  // Deep Corporate Blue for admin actions
+  static const Color _corporateBlue = Color(0xFF003F75);
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Sub-tabs
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            labelColor: AppTheme.teacherColor,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: AppTheme.teacherColor,
-            tabs: const [
-              Tab(text: 'Events & Notices'),
-              Tab(text: 'Opportunities'),
-            ],
-          ),
-        ),
-        
-        // Content
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildNoticesView(),
-              _buildOpportunitiesView(),
-            ],
-          ),
-        ),
-      ],
+    return Scaffold(
+      body: StreamBuilder<List<NoticeModel>>(
+        stream: _noticeService.allNoticesStream(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+                  const SizedBox(height: 16),
+                  Text('Error loading notices', style: TextStyle(color: Colors.red[400])),
+                  const SizedBox(height: 8),
+                  Text(snapshot.error.toString(), style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            );
+          }
+
+          final notices = snapshot.data ?? [];
+
+          if (notices.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.campaign_outlined, size: 80, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No notices yet',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tap the button below to create your first notice',
+                    style: TextStyle(color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: notices.length,
+            itemBuilder: (context, index) => _NoticeCard(
+              notice: notices[index],
+              onDelete: () => _deleteNotice(notices[index]),
+            ),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddNoticeDialog,
+        backgroundColor: _corporateBlue,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add Notice', style: TextStyle(color: Colors.white)),
+      ),
     );
   }
 
-  Widget _buildNoticesView() {
-    return Stack(
-      children: [
-        ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _notices.length,
-          itemBuilder: (context, index) => _NoticeCard(notice: _notices[index]),
-        ),
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: FloatingActionButton.extended(
-            onPressed: () => _showCreateNoticeDialog(),
-            backgroundColor: AppTheme.teacherColor,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Notice'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOpportunitiesView() {
-    return Stack(
-      children: [
-        ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: _opportunities.length,
-          itemBuilder: (context, index) => _OpportunityCard(opportunity: _opportunities[index]),
-        ),
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: FloatingActionButton.extended(
-            onPressed: () => _showCreateOpportunityDialog(),
-            backgroundColor: AppTheme.teacherColor,
-            icon: const Icon(Icons.add),
-            label: const Text('Add Opportunity'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showCreateNoticeDialog() {
+  /// Show Add Notice Dialog - Functional Form
+  void _showAddNoticeDialog() {
     final titleController = TextEditingController();
-    final descController = TextEditingController();
-    NoticeType selectedType = NoticeType.announcement;
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    final bodyController = TextEditingController();
+    NoticeType selectedType = NoticeType.alert;
+    TargetGrade selectedGrade = TargetGrade.all;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Create Notice'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _corporateBlue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.campaign, color: _corporateBlue),
+              ),
+              const SizedBox(width: 12),
+              const Text('Create Notice'),
+            ],
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Title Field
                 TextField(
                   controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()),
+                  decoration: InputDecoration(
+                    labelText: 'Title',
+                    hintText: 'Enter notice heading',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.title),
+                  ),
+                  textCapitalization: TextCapitalization.words,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+
+                // Body Field
                 TextField(
-                  controller: descController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                  controller: bodyController,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    labelText: 'Details',
+                    hintText: 'Enter notice details',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    alignLabelWithHint: true,
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+
+                // Target Grade Dropdown
+                DropdownButtonFormField<TargetGrade>(
+                  value: selectedGrade,
+                  decoration: InputDecoration(
+                    labelText: 'Target Grade',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.school),
+                  ),
+                  items: TargetGrade.values.map((grade) {
+                    return DropdownMenuItem(
+                      value: grade,
+                      child: Text(grade.displayName),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedGrade = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Notice Type Dropdown
                 DropdownButtonFormField<NoticeType>(
                   value: selectedType,
-                  decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
-                  items: NoticeType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.displayName))).toList(),
-                  onChanged: (v) => setDialogState(() => selectedType = v!),
-                ),
-                const SizedBox(height: 12),
-                ListTile(
-                  title: const Text('Event Date'),
-                  subtitle: Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                  decoration: InputDecoration(
+                    labelText: 'Notice Type',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.category),
+                  ),
+                  items: NoticeType.values.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: Row(
+                        children: [
+                          Icon(_getTypeIcon(type), size: 20, color: _getTypeColor(type)),
+                          const SizedBox(width: 8),
+                          Text(type.displayName),
+                        ],
+                      ),
                     );
-                    if (date != null) setDialogState(() => selectedDate = date);
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedType = value);
+                    }
                   },
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Notice created successfully!')),
-                );
-              },
-              child: const Text('Create'),
+              onPressed: () => _postNotice(
+                context,
+                titleController,
+                bodyController,
+                selectedType,
+                selectedGrade,
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _corporateBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Post'),
             ),
           ],
         ),
@@ -248,62 +221,163 @@ class _NoticeBoardTabState extends State<NoticeBoardTab> with SingleTickerProvid
     );
   }
 
-  void _showCreateOpportunityDialog() {
-    final titleController = TextEditingController();
-    final descController = TextEditingController();
-    OpportunityType selectedType = OpportunityType.scholarship;
+  /// Post Notice - Write to Firestore
+  Future<void> _postNotice(
+    BuildContext dialogContext,
+    TextEditingController titleController,
+    TextEditingController bodyController,
+    NoticeType type,
+    TargetGrade targetGrade,
+  ) async {
+    final title = titleController.text.trim();
+    final body = bodyController.text.trim();
 
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Create Opportunity'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+    if (title.isEmpty || body.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all fields'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Get teacher info
+    final teacher = HiveService.getTeacher();
+    final teacherId = teacher?.uid ?? 'unknown';
+
+    final notice = NoticeModel(
+      id: '', // Will be set by Firestore
+      title: title,
+      body: body,
+      targetGrade: targetGrade.firestoreValue,
+      type: type.displayName,
+      createdBy: teacherId,
+    );
+
+    try {
+      await _noticeService.createNotice(notice);
+
+      // Clear text fields
+      titleController.clear();
+      bodyController.clear();
+
+      // Close dialog
+      if (dialogContext.mounted) {
+        Navigator.pop(dialogContext);
+      }
+
+      // Show success SnackBar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
               children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Title', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<OpportunityType>(
-                  value: selectedType,
-                  decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
-                  items: OpportunityType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.displayName))).toList(),
-                  onChanged: (v) => setDialogState(() => selectedType = v!),
-                ),
+                Icon(Icons.cloud_done, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Notice uploaded to Cloud'),
               ],
             ),
+            backgroundColor: Colors.green[600],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Opportunity created successfully!')),
-                );
-              },
-              child: const Text('Create'),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Delete Notice - Removes from all Student screens instantly
+  Future<void> _deleteNotice(NoticeModel notice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Notice'),
+        content: Text('Are you sure you want to delete "${notice.title}"?\n\nThis will remove it from all student feeds immediately.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
             ),
-          ],
-        ),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
     );
+
+    if (confirmed == true) {
+      try {
+        await _noticeService.deleteNotice(notice.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Notice deleted'),
+              backgroundColor: Colors.grey[700],
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  IconData _getTypeIcon(NoticeType type) {
+    switch (type) {
+      case NoticeType.webinar:
+        return Icons.video_call;
+      case NoticeType.session:
+        return Icons.groups;
+      case NoticeType.workshop:
+        return Icons.build;
+      case NoticeType.alert:
+        return Icons.warning_amber;
+    }
+  }
+
+  Color _getTypeColor(NoticeType type) {
+    switch (type) {
+      case NoticeType.webinar:
+        return Colors.blue;
+      case NoticeType.session:
+        return Colors.purple;
+      case NoticeType.workshop:
+        return Colors.green;
+      case NoticeType.alert:
+        return Colors.orange;
+    }
   }
 }
 
-/// Notice Card Widget
+/// Notice Card Widget - Displays individual notice
 class _NoticeCard extends StatelessWidget {
-  final Notice notice;
-  const _NoticeCard({required this.notice});
+  final NoticeModel notice;
+  final VoidCallback onDelete;
+
+  const _NoticeCard({required this.notice, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -312,53 +386,95 @@ class _NoticeCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header with type badge
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _getTypeColor(notice.type).withOpacity(0.1),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+              color: _getTypeColor(notice.noticeType).withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
             ),
             child: Row(
               children: [
-                Icon(_getTypeIcon(notice.type), color: _getTypeColor(notice.type)),
+                Icon(
+                  _getTypeIcon(notice.noticeType),
+                  color: _getTypeColor(notice.noticeType),
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
-                Text(notice.type.displayName, style: TextStyle(fontWeight: FontWeight.w600, color: _getTypeColor(notice.type))),
-                const Spacer(),
-                if (notice.targetGrades.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
-                    child: Text('Grades: ${notice.targetGrades.join(", ")}', style: const TextStyle(fontSize: 11)),
+                Text(
+                  notice.type,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _getTypeColor(notice.noticeType),
                   ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Grade: ${notice.targetGrade}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                  onPressed: onDelete,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               ],
             ),
           ),
+
+          // Content
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(notice.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                Text(
+                  notice.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Text(notice.description, style: TextStyle(color: Colors.grey[700])),
+                Text(
+                  notice.body,
+                  style: TextStyle(
+                    color: Colors.grey[700],
+                    height: 1.5,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(Icons.calendar_today, size: 16, color: Colors.grey[500]),
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
                     const SizedBox(width: 4),
-                    Text('${notice.eventDate.day}/${notice.eventDate.month}/${notice.eventDate.year}',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-                    if (notice.eventTime != null) ...[
-                      const SizedBox(width: 12),
-                      Icon(Icons.access_time, size: 16, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
-                      Text(notice.eventTime!, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-                    ],
+                    Text(
+                      _formatTimestamp(notice.timestamp),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
                   ],
                 ),
               ],
@@ -369,90 +485,39 @@ class _NoticeCard extends StatelessWidget {
     );
   }
 
-  Color _getTypeColor(NoticeType type) {
-    switch (type) {
-      case NoticeType.webinar: return Colors.blue;
-      case NoticeType.workshop: return Colors.green;
-      case NoticeType.careerTalk: return Colors.purple;
-      case NoticeType.announcement: return Colors.orange;
-      case NoticeType.deadline: return Colors.red;
-    }
+  String _formatTimestamp(DateTime? timestamp) {
+    if (timestamp == null) return 'Just now';
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
   }
 
   IconData _getTypeIcon(NoticeType type) {
     switch (type) {
-      case NoticeType.webinar: return Icons.video_call;
-      case NoticeType.workshop: return Icons.build;
-      case NoticeType.careerTalk: return Icons.record_voice_over;
-      case NoticeType.announcement: return Icons.campaign;
-      case NoticeType.deadline: return Icons.alarm;
+      case NoticeType.webinar:
+        return Icons.video_call;
+      case NoticeType.session:
+        return Icons.groups;
+      case NoticeType.workshop:
+        return Icons.build;
+      case NoticeType.alert:
+        return Icons.warning_amber;
     }
   }
-}
 
-/// Opportunity Card Widget
-class _OpportunityCard extends StatelessWidget {
-  final Opportunity opportunity;
-  const _OpportunityCard({required this.opportunity});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _getTypeColor(opportunity.type).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(opportunity.type.displayName,
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _getTypeColor(opportunity.type))),
-                ),
-                const Spacer(),
-                if (opportunity.deadline != null)
-                  Text('Deadline: ${opportunity.deadline!.day}/${opportunity.deadline!.month}',
-                      style: TextStyle(fontSize: 12, color: Colors.red[400])),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(opportunity.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Text(opportunity.description, style: TextStyle(color: Colors.grey[700])),
-            if (opportunity.eligibility != null) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.check_circle, size: 16, color: Colors.green[400]),
-                  const SizedBox(width: 4),
-                  Expanded(child: Text(opportunity.eligibility!, style: TextStyle(fontSize: 13, color: Colors.grey[600]))),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _getTypeColor(OpportunityType type) {
+  Color _getTypeColor(NoticeType type) {
     switch (type) {
-      case OpportunityType.scholarship: return Colors.green;
-      case OpportunityType.competition: return Colors.blue;
-      case OpportunityType.olympiad: return Colors.purple;
-      case OpportunityType.internship: return Colors.orange;
-      case OpportunityType.course: return Colors.teal;
+      case NoticeType.webinar:
+        return Colors.blue;
+      case NoticeType.session:
+        return Colors.purple;
+      case NoticeType.workshop:
+        return Colors.green;
+      case NoticeType.alert:
+        return Colors.orange;
     }
   }
 }

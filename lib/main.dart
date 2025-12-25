@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
@@ -22,6 +23,14 @@ Future<void> _initializeApp() async {
     debugPrint('🔥 [Main] Initializing Firebase...');
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     debugPrint('✅ [Main] Firebase initialized');
+
+    // Enable Firestore offline persistence for notes sync
+    debugPrint('💾 [Main] Enabling Firestore offline persistence...');
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+    debugPrint('✅ [Main] Firestore offline sync enabled');
 
     debugPrint('🔐 [Main] Initializing auth persistence...');
     await AuthService.ensurePersistenceInitialized();

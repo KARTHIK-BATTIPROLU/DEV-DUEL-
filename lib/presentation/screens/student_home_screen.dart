@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/route_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/user_model.dart';
-import '../../models/teacher_models.dart';
+import '../../models/teacher_models.dart' hide NoticeType, Notice;
+import '../../models/notice_model.dart';
+import '../../models/note_model.dart';
 import '../../providers/career_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/hive_service.dart';
 import '../../services/student_service.dart';
+import '../../services/notice_service.dart';
+import '../../services/note_service.dart';
 import 'career_explorer_screen.dart';
+import 'career_detail_screen.dart';
 import 'quiz_screen.dart';
+import 'mentor_messages_screen.dart';
 
 /// Student Home Screen - Professional 2025 UI
 class StudentHomeScreen extends StatefulWidget {
@@ -100,7 +107,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 }
 
-/// Home Tab - Professional Design
+/// Home Tab - Professional Design with My Recent Notes
 class _HomeTab extends StatelessWidget {
   final StudentModel? student;
   final VoidCallback onLogout;
@@ -155,6 +162,14 @@ class _HomeTab extends StatelessWidget {
             _PhaseCard(grade: grade, phaseName: _getPhaseName(grade), phaseIcon: _getPhaseIcon(grade), phaseColor: phaseColor),
             const SizedBox(height: 24),
 
+            // My Recent Notes - Dashboard Quick View
+            if (student != null) ...[
+              const Text('📝 My Recent Notes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 12),
+              _RecentNotesSection(userId: student!.uid),
+              const SizedBox(height: 24),
+            ],
+
             // Teacher's Notes
             if (student != null) ...[
               const Text('Teacher\'s Notes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
@@ -173,6 +188,117 @@ class _HomeTab extends StatelessWidget {
                 Expanded(child: _QuickActionCard(title: 'Take a Quiz', icon: Icons.quiz, color: AppTheme.accentColor, onTap: onQuiz)),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Recent Notes Section - Dashboard Quick View (3 most recent)
+class _RecentNotesSection extends StatelessWidget {
+  final String userId;
+  const _RecentNotesSection({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    final noteService = NoteService();
+    final careerProvider = context.read<CareerProvider>();
+
+    return StreamBuilder<List<NoteModel>>(
+      stream: noteService.recentNotesStream(userId, limit: 3),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final notes = snapshot.data ?? [];
+
+        if (notes.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF003F75).withAlpha(15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF003F75).withAlpha(50)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.note_alt_outlined, color: const Color(0xFF003F75).withAlpha(150)),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text('No saved notes yet. Explore careers and save your insights!',
+                      style: TextStyle(color: Color(0xFF003F75))),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: notes.map((note) => _RecentNoteCard(
+            note: note,
+            onTap: () {
+              // Navigate to CareerDetailScreen for this careerId
+              final career = careerProvider.careers.where((c) => c.id == note.careerId).firstOrNull;
+              if (career != null) {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ChangeNotifierProvider.value(
+                    value: careerProvider,
+                    child: CareerDetailScreen(career: career),
+                  ),
+                ));
+              }
+            },
+          )).toList(),
+        );
+      },
+    );
+  }
+}
+
+/// Recent Note Card - Compact view for dashboard
+class _RecentNoteCard extends StatelessWidget {
+  final NoteModel note;
+  final VoidCallback onTap;
+  const _RecentNoteCard({required this.note, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 4, offset: const Offset(0, 2))],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF003F75).withAlpha(25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.note, size: 18, color: Color(0xFF003F75)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(note.careerTitle, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(note.noteContent, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
           ],
         ),
       ),
@@ -398,38 +524,85 @@ class _NoteCard extends StatelessWidget {
   }
 }
 
-/// Notices Tab
+/// Notices Tab - REACTIVE STREAM from Firestore
+/// Listens to notices filtered by student grade
+/// Updates instantly when Teacher posts/deletes notices
 class _NoticesTab extends StatelessWidget {
   final StudentModel? student;
   const _NoticesTab({required this.student});
 
   @override
   Widget build(BuildContext context) {
-    final studentService = StudentService();
+    final noticeService = NoticeService();
     final grade = student?.grade ?? 10;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Notices & Events'), automaticallyImplyLeading: false),
-      body: StreamBuilder<List<Notice>>(
-        stream: studentService.noticesForGradeStream(grade),
+      body: StreamBuilder<List<NoticeModel>>(
+        // REACTIVE QUERY: Listens ONLY to relevant notices
+        // Uses whereIn: [currentStudentGradeFilter, 'All']
+        stream: noticeService.noticesForStudentStreamLocal(grade),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+                  const SizedBox(height: 16),
+                  Text('Error loading notices', style: TextStyle(color: Colors.red[400])),
+                ],
+              ),
+            );
+          }
+
           final notices = snapshot.data ?? [];
+
+          // EMPTY STATE: Clean graphic when no announcements
           if (notices.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.campaign_outlined, size: 64, color: AppTheme.textHint),
-                  const SizedBox(height: 16),
-                  const Text('No notices yet', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                  Text('Check back later for updates', style: TextStyle(color: AppTheme.textSecondary)),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.notifications_none_rounded,
+                      size: 64,
+                      color: AppTheme.primaryColor.withOpacity(0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'No new announcements',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Check back later for updates from your teachers',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppTheme.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             );
           }
+
           return ListView.builder(
             padding: const EdgeInsets.all(24),
             itemCount: notices.length,
@@ -441,8 +614,9 @@ class _NoticesTab extends StatelessWidget {
   }
 }
 
+/// Notice Card - Displays individual notice from Firestore
 class _NoticeCard extends StatelessWidget {
-  final Notice notice;
+  final NoticeModel notice;
   const _NoticeCard({required this.notice});
 
   @override
@@ -453,41 +627,70 @@ class _NoticeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header with type badge
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _getTypeColor(notice.type).withOpacity(0.1),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
+              color: _getTypeColor(notice.noticeType).withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
             ),
             child: Row(
               children: [
-                Icon(_getTypeIcon(notice.type), color: _getTypeColor(notice.type), size: 20),
+                Icon(
+                  _getTypeIcon(notice.noticeType),
+                  color: _getTypeColor(notice.noticeType),
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
-                Text(notice.type.displayName, style: TextStyle(fontWeight: FontWeight.w600, color: _getTypeColor(notice.type))),
+                Text(
+                  notice.type,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: _getTypeColor(notice.noticeType),
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Grade: ${notice.targetGrade}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                ),
               ],
             ),
           ),
+          // Content
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(notice.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                Text(
+                  notice.title,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
-                Text(notice.description, style: TextStyle(color: AppTheme.textSecondary, height: 1.5)),
+                Text(
+                  notice.body,
+                  style: TextStyle(color: AppTheme.textSecondary, height: 1.5),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(Icons.calendar_today, size: 14, color: AppTheme.textHint),
+                    Icon(Icons.access_time, size: 14, color: AppTheme.textHint),
                     const SizedBox(width: 4),
-                    Text('${notice.eventDate.day}/${notice.eventDate.month}/${notice.eventDate.year}',
-                        style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
-                    if (notice.eventTime != null) ...[
-                      const SizedBox(width: 12),
-                      Icon(Icons.access_time, size: 14, color: AppTheme.textHint),
-                      const SizedBox(width: 4),
-                      Text(notice.eventTime!, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
-                    ],
+                    Text(
+                      _formatTimestamp(notice.timestamp),
+                      style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                    ),
                   ],
                 ),
               ],
@@ -498,23 +701,39 @@ class _NoticeCard extends StatelessWidget {
     );
   }
 
+  String _formatTimestamp(DateTime? timestamp) {
+    if (timestamp == null) return 'Just now';
+    final diff = DateTime.now().difference(timestamp);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+  }
+
   Color _getTypeColor(NoticeType type) {
     switch (type) {
-      case NoticeType.webinar: return AppTheme.secondaryColor;
-      case NoticeType.workshop: return AppTheme.successColor;
-      case NoticeType.careerTalk: return const Color(0xFF7B1FA2);
-      case NoticeType.announcement: return AppTheme.warningColor;
-      case NoticeType.deadline: return AppTheme.errorColor;
+      case NoticeType.webinar:
+        return AppTheme.secondaryColor;
+      case NoticeType.session:
+        return const Color(0xFF7B1FA2);
+      case NoticeType.workshop:
+        return AppTheme.successColor;
+      case NoticeType.alert:
+        return AppTheme.warningColor;
     }
   }
 
   IconData _getTypeIcon(NoticeType type) {
     switch (type) {
-      case NoticeType.webinar: return Icons.video_call;
-      case NoticeType.workshop: return Icons.build;
-      case NoticeType.careerTalk: return Icons.record_voice_over;
-      case NoticeType.announcement: return Icons.campaign;
-      case NoticeType.deadline: return Icons.alarm;
+      case NoticeType.webinar:
+        return Icons.video_call;
+      case NoticeType.session:
+        return Icons.groups;
+      case NoticeType.workshop:
+        return Icons.build;
+      case NoticeType.alert:
+        return Icons.warning_amber;
     }
   }
 }
@@ -709,7 +928,7 @@ class _DoubtCard extends StatelessWidget {
   }
 }
 
-/// Profile Tab - Fixed Logout Button
+/// Profile Tab - Fixed with Double-Builder Pattern & Saved Career Insights
 class _ProfileTab extends StatelessWidget {
   final StudentModel? student;
   final VoidCallback onLogout;
@@ -727,10 +946,10 @@ class _ProfileTab extends StatelessWidget {
             // Avatar
             CircleAvatar(
               radius: 50,
-              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+              backgroundColor: const Color(0xFF003F75).withAlpha(25),
               child: Text(
                 student?.name.isNotEmpty == true ? student!.name[0].toUpperCase() : 'S',
-                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+                style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Color(0xFF003F75)),
               ),
             ),
             const SizedBox(height: 16),
@@ -739,33 +958,68 @@ class _ProfileTab extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
+                color: const Color(0xFF003F75).withAlpha(25),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text('Grade ${student?.grade ?? '-'}', style: TextStyle(fontSize: 14, color: AppTheme.primaryColor, fontWeight: FontWeight.w500)),
+              child: Text('Grade ${student?.grade ?? '-'}',
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF003F75), fontWeight: FontWeight.w500)),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // Mentor Messages Button
+            if (student != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 16),
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => MentorMessagesScreen(studentId: student!.uid)),
+                  ),
+                  icon: const Icon(Icons.message),
+                  label: const Text('Messages from Mentor'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF003F75),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
 
             // Profile Items
             _ProfileItem(icon: Icons.badge, label: 'Student ID', value: student?.studentId ?? '-'),
             _ProfileItem(icon: Icons.email, label: 'Email', value: student?.email ?? '-'),
             _ProfileItem(icon: Icons.school, label: 'Grade', value: '${student?.grade ?? '-'}'),
-            const SizedBox(height: 40),
+            const SizedBox(height: 24),
 
-            // Logout Button - FIXED: Constrained width
+            // Saved Career Insights Section - Double-Builder Pattern
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('📚 Saved Career Insights', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 12),
+            _SavedNotesSection(student: student),
+            const SizedBox(height: 32),
+
+            // Logout Button - Constrained to max 250px, centered, surface color
             Center(
-              child: SizedBox(
-                width: 200,
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: onLogout,
-                  icon: const Icon(Icons.logout, size: 20),
-                  label: const Text('Logout'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.errorColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 250),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: onLogout,
+                    icon: const Icon(Icons.logout, size: 20),
+                    label: const Text('Logout'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF5F7FA),
+                      foregroundColor: Colors.red.shade700,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                      side: BorderSide(color: Colors.red.shade200),
+                    ),
                   ),
                 ),
               ),
@@ -775,6 +1029,144 @@ class _ProfileTab extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Saved Notes Section - Double-Builder Pattern
+/// FutureBuilder<User?> wraps StreamBuilder for proper auth state
+class _SavedNotesSection extends StatelessWidget {
+  final StudentModel? student;
+  const _SavedNotesSection({required this.student});
+
+  @override
+  Widget build(BuildContext context) {
+    // Double-Builder Pattern: FutureBuilder waits for FirebaseAuth.currentUser
+    return FutureBuilder<User?>(
+      future: Future.value(FirebaseAuth.instance.currentUser),
+      builder: (context, authSnapshot) {
+        if (authSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final user = authSnapshot.data;
+        if (user == null) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text('Please login to view saved notes'),
+          );
+        }
+
+        final noteService = NoteService();
+
+        // StreamBuilder listens to users/{userId}/my_notes
+        return StreamBuilder<List<NoteModel>>(
+          stream: noteService.userNotesStream(user.uid),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withAlpha(25),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+              );
+            }
+
+            final notes = snapshot.data ?? [];
+
+            if (notes.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F7FA),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.note_alt_outlined, size: 48, color: Colors.grey[400]),
+                    const SizedBox(height: 12),
+                    const Text('No saved insights yet', style: TextStyle(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 4),
+                    Text('Explore careers and save your notes!', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                  ],
+                ),
+              );
+            }
+
+            // Display notes using ListView.separated
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: notes.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) => _SavedNoteCard(note: notes[index]),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Saved Note Card for Profile Screen
+class _SavedNoteCard extends StatelessWidget {
+  final NoteModel note;
+  const _SavedNoteCard({required this.note});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 6, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0FACB0).withAlpha(25),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.work_outline, size: 16, color: Color(0xFF0FACB0)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(note.careerTitle, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              ),
+              Text(_formatDate(note.timestamp), style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(note.noteContent, style: TextStyle(fontSize: 13, color: Colors.grey[700], height: 1.4)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '';
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.day}/${date.month}/${date.year}';
   }
 }
 

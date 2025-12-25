@@ -3,9 +3,10 @@ import '../models/career_model.dart';
 import '../services/career_service.dart';
 
 /// Career Provider - State management for career data
+/// Implements deterministic filtering for career paths
 class CareerProvider extends ChangeNotifier {
   final CareerService _careerService = CareerService();
-  
+
   List<CareerModel> _careers = [];
   List<CareerModel> _filteredCareers = [];
   CareerModel? _selectedCareer;
@@ -15,16 +16,25 @@ class CareerProvider extends ChangeNotifier {
 
   // Getters
   List<CareerModel> get careers => _careers;
-  List<CareerModel> get filteredCareers => _filteredCareers.isEmpty ? _careers : _filteredCareers;
+
+  /// Returns filtered careers based on selected stream
+  /// If no stream selected (All), returns all careers
+  /// If stream selected but no matches, returns empty list (not all careers)
+  List<CareerModel> get filteredCareers => _filteredCareers;
+
   CareerModel? get selectedCareer => _selectedCareer;
   StreamTag? get selectedStream => _selectedStream;
   bool get isLoading => _isLoading;
   int get userGrade => _userGrade;
 
+  /// Check if a specific stream is selected
+  bool isStreamSelected(StreamTag? stream) => _selectedStream == stream;
+
   // Initialize
   void initialize() {
     _careers = _careerService.getAllCareers();
-    _filteredCareers = _careers;
+    _filteredCareers = List.from(_careers); // Start with all careers
+    _selectedStream = null; // Default: All selected
     notifyListeners();
   }
 
@@ -34,14 +44,23 @@ class CareerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Filter by stream
+  /// Filter by stream - DETERMINISTIC FILTERING
+  /// Uses .where((career) => career.streamTag == stream).toList()
+  /// Default State: If 'All' (null) is selected, show every career
   void filterByStream(StreamTag? stream) {
     _selectedStream = stream;
+
     if (stream == null) {
-      _filteredCareers = _careers;
+      // 'All' selected - show every career
+      _filteredCareers = List.from(_careers);
     } else {
-      _filteredCareers = _careerService.getCareersByStream(stream);
+      // Specific stream selected - filter deterministically
+      _filteredCareers =
+          _careers.where((career) => career.streamTag == stream).toList();
     }
+
+    debugPrint(
+        '🔍 [CareerProvider] Filter: ${stream?.shortName ?? "All"} -> ${_filteredCareers.length} careers');
     notifyListeners();
   }
 

@@ -921,3 +921,119 @@ class Doubt {
     answeredAt: answeredAt ?? this.answeredAt,
   );
 }
+
+// ============================================================
+// RESOURCE LIBRARY MODEL
+// ============================================================
+enum ResourceCategory { video, article, course, pdf, tool, other }
+
+extension ResourceCategoryExt on ResourceCategory {
+  String get displayName {
+    switch (this) {
+      case ResourceCategory.video: return 'Video';
+      case ResourceCategory.article: return 'Article';
+      case ResourceCategory.course: return 'Course';
+      case ResourceCategory.pdf: return 'PDF';
+      case ResourceCategory.tool: return 'Tool';
+      case ResourceCategory.other: return 'Other';
+    }
+  }
+
+  String get icon {
+    switch (this) {
+      case ResourceCategory.video: return 'play_circle';
+      case ResourceCategory.article: return 'article';
+      case ResourceCategory.course: return 'school';
+      case ResourceCategory.pdf: return 'picture_as_pdf';
+      case ResourceCategory.tool: return 'build';
+      case ResourceCategory.other: return 'link';
+    }
+  }
+}
+
+class Resource {
+  final String id;
+  final String title;
+  final String description;
+  final String url;
+  final String category;
+  final List<String> tags;
+  final String? careerId;
+  final String? careerTitle;
+  final List<int> targetGrades;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String createdBy;
+
+  Resource({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.url,
+    required this.category,
+    this.tags = const [],
+    this.careerId,
+    this.careerTitle,
+    this.targetGrades = const [],
+    this.isActive = true,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.createdBy,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    'url': url,
+    'category': category,
+    'tags': tags,
+    'careerId': careerId,
+    'careerTitle': careerTitle,
+    'targetGrades': targetGrades,
+    'isActive': isActive,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'createdBy': createdBy,
+  };
+
+  factory Resource.fromMap(Map<String, dynamic> map) => Resource(
+    id: map['id'] ?? '',
+    title: map['title'] ?? '',
+    description: map['description'] ?? '',
+    url: map['url'] ?? '',
+    category: map['category'] ?? 'other',
+    tags: List<String>.from(map['tags'] ?? []),
+    careerId: map['careerId'],
+    careerTitle: map['careerTitle'],
+    targetGrades: List<int>.from(map['targetGrades'] ?? []),
+    isActive: map['isActive'] ?? true,
+    createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
+    updatedAt: DateTime.tryParse(map['updatedAt'] ?? '') ?? DateTime.now(),
+    createdBy: map['createdBy'] ?? '',
+  );
+
+  Resource copyWith({
+    String? title,
+    String? description,
+    String? url,
+    String? category,
+    List<String>? tags,
+    bool? isActive,
+  }) => Resource(
+    id: id,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    url: url ?? this.url,
+    category: category ?? this.category,
+    tags: tags ?? this.tags,
+    careerId: careerId,
+    careerTitle: careerTitle,
+    targetGrades: targetGrades,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt,
+    updatedAt: DateTime.now(),
+    createdBy: createdBy,
+  );
+}

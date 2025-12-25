@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/career_model.dart';
-import '../../../data/career_data.dart';
+import '../../../models/teacher_models.dart';
+import '../../../services/teacher_service.dart';
 
-/// Roadmap Architect Tab - Build step-by-step career nodes
+/// Roadmap Architect Tab - Build step-by-step career roadmaps with Firestore persistence
 class RoadmapArchitectTab extends StatefulWidget {
   const RoadmapArchitectTab({super.key});
 
@@ -12,22 +13,17 @@ class RoadmapArchitectTab extends StatefulWidget {
 }
 
 class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
-  List<CareerModel> _careers = [];
-  CareerModel? _selectedCareer;
+  final _teacherService = TeacherService();
+  ManagedCareer? _selectedCareer;
   List<RoadmapNode> _editingNodes = [];
   bool _isEditing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _careers = CareerData.getAllCareers();
-  }
+  bool _isSaving = false;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Career List (Left Panel)
+        // Career List (Left Panel) - StreamBuilder from Firestore
         Container(
           width: 280,
           decoration: BoxDecoration(
@@ -49,18 +45,52 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
                 ),
               ),
               Expanded(
-                child: ListView.builder(
-                  itemCount: _careers.length,
-                  itemBuilder: (context, index) {
-                    final career = _careers[index];
-                    final isSelected = _selectedCareer?.id == career.id;
-                    return ListTile(
-                      selected: isSelected,
-                      selectedTileColor: AppTheme.teacherColor.withOpacity(0.1),
-                      leading: Icon(_getCareerIcon(career.iconName), color: isSelected ? AppTheme.teacherColor : Colors.grey),
-                      title: Text(career.title, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                      subtitle: Text(career.streamTag.shortName, style: const TextStyle(fontSize: 12)),
-                      onTap: () => _selectCareer(career),
+                child: StreamBuilder<List<ManagedCareer>>(
+                  stream: _teacherService.careersStream(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final careers = snapshot.data ?? [];
+                    if (careers.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text('No careers yet.\nAdd careers in the Careers tab.', 
+                            textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600])),
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: careers.length,
+                      itemBuilder: (context, index) {
+                        final career = careers[index];
+                        final isSelected = _selectedCareer?.id == career.id;
+                        return ListTile(
+                          selected: isSelected,
+                          selectedTileColor: AppTheme.teacherColor.withOpacity(0.1),
+                          leading: Icon(_getCareerIcon(career.iconName), color: isSelected ? AppTheme.teacherColor : Colors.grey),
+                          title: Text(career.title, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                          subtitle: Row(
+                            children: [
+                              Text(career.streamTag.shortName, style: const TextStyle(fontSize: 12)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: career.roadmap.nodes.isEmpty ? Colors.orange.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '${career.roadmap.nodes.length} steps',
+                                  style: TextStyle(fontSize: 10, color: career.roadmap.nodes.isEmpty ? Colors.orange : Colors.green),
+                                ),
+                              ),
+                            ],
+                          ),
+                          onTap: () => _selectCareer(career),
+                        );
+                      },
                     );
                   },
                 ),
@@ -71,9 +101,7 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
 
         // Roadmap Editor (Right Panel)
         Expanded(
-          child: _selectedCareer == null
-              ? _buildEmptyState()
-              : _buildRoadmapEditor(),
+          child: _selectedCareer == null ? _buildEmptyState() : _buildRoadmapEditor(),
         ),
       ],
     );
@@ -111,13 +139,18 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
                   ],
                 ),
               ),
-              if (_isEditing) ...[
+              if (_isSaving)
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              else if (_isEditing) ...[
                 TextButton(onPressed: _cancelEditing, child: const Text('Cancel')),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: _saveRoadmap,
                   icon: const Icon(Icons.save, size: 18),
-                  label: const Text('Save'),
+                  label: const Text('Save to Firestore'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                 ),
               ] else
@@ -134,9 +167,7 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
 
         // Roadmap Timeline
         Expanded(
-          child: _editingNodes.isEmpty
-              ? _buildEmptyRoadmap()
-              : _buildRoadmapTimeline(),
+          child: _editingNodes.isEmpty ? _buildEmptyRoadmap() : _buildRoadmapTimeline(),
         ),
 
         // Add Node Button (when editing)
@@ -173,6 +204,11 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add First Step'),
               ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Text('Click "Edit Roadmap" to add steps', style: TextStyle(color: Colors.grey[600])),
             ),
         ],
       ),
@@ -190,7 +226,7 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
         final isLast = index == _editingNodes.length - 1;
 
         return _RoadmapNodeCard(
-          key: ValueKey(node.order),
+          key: ValueKey('${node.order}_${node.title}'),
           node: node,
           index: index,
           isLast: isLast,
@@ -202,7 +238,7 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
     );
   }
 
-  void _selectCareer(CareerModel career) {
+  void _selectCareer(ManagedCareer career) {
     setState(() {
       _selectedCareer = career;
       _editingNodes = List.from(career.roadmap.nodes);
@@ -210,9 +246,7 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
     });
   }
 
-  void _startEditing() {
-    setState(() => _isEditing = true);
-  }
+  void _startEditing() => setState(() => _isEditing = true);
 
   void _cancelEditing() {
     setState(() {
@@ -221,12 +255,25 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
     });
   }
 
-  void _saveRoadmap() {
-    // In production, save to Firestore
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Roadmap saved successfully!'), backgroundColor: Colors.green),
-    );
-    setState(() => _isEditing = false);
+  Future<void> _saveRoadmap() async {
+    setState(() => _isSaving = true);
+    try {
+      await _teacherService.updateCareerRoadmap(_selectedCareer!.id, _editingNodes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Roadmap saved! Students will see changes instantly.'), backgroundColor: Colors.green),
+        );
+        setState(() => _isEditing = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   void _addNode() {
@@ -251,15 +298,7 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
   void _deleteNode(int index) {
     setState(() {
       _editingNodes.removeAt(index);
-      // Reorder remaining nodes
-      for (int i = 0; i < _editingNodes.length; i++) {
-        _editingNodes[i] = RoadmapNode(
-          title: _editingNodes[i].title,
-          description: _editingNodes[i].description,
-          duration: _editingNodes[i].duration,
-          order: i,
-        );
-      }
+      _reindexNodes();
     });
   }
 
@@ -268,16 +307,19 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
       if (newIndex > oldIndex) newIndex--;
       final node = _editingNodes.removeAt(oldIndex);
       _editingNodes.insert(newIndex, node);
-      // Update order values
-      for (int i = 0; i < _editingNodes.length; i++) {
-        _editingNodes[i] = RoadmapNode(
-          title: _editingNodes[i].title,
-          description: _editingNodes[i].description,
-          duration: _editingNodes[i].duration,
-          order: i,
-        );
-      }
+      _reindexNodes();
     });
+  }
+
+  void _reindexNodes() {
+    for (int i = 0; i < _editingNodes.length; i++) {
+      _editingNodes[i] = RoadmapNode(
+        title: _editingNodes[i].title,
+        description: _editingNodes[i].description,
+        duration: _editingNodes[i].duration,
+        order: i,
+      );
+    }
   }
 
   void _showNodeEditor(RoadmapNode? existingNode, Function(RoadmapNode) onSave) {
@@ -295,33 +337,50 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
             children: [
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(labelText: 'Step Title', hintText: 'e.g., Complete 12th Grade', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Step Title *', hintText: 'e.g., Complete 12th Grade', border: OutlineInputBorder()),
+                autofocus: true,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: descController,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Description', hintText: 'What needs to be done in this step?', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Description', hintText: 'What needs to be done?', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: durationController,
-                decoration: const InputDecoration(labelText: 'Duration', hintText: 'e.g., 2 years, 6 months', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Duration', hintText: 'e.g., 2 years', border: OutlineInputBorder()),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              titleController.dispose();
+              descController.dispose();
+              durationController.dispose();
+              Navigator.pop(context);
+            },
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
-              if (titleController.text.isEmpty) return;
+              if (titleController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Title is required'), backgroundColor: Colors.orange),
+                );
+                return;
+              }
               onSave(RoadmapNode(
-                title: titleController.text,
-                description: descController.text,
-                duration: durationController.text,
+                title: titleController.text.trim(),
+                description: descController.text.trim(),
+                duration: durationController.text.trim(),
                 order: existingNode?.order ?? _editingNodes.length,
               ));
+              titleController.dispose();
+              descController.dispose();
+              durationController.dispose();
               Navigator.pop(context);
             },
             child: const Text('Save'),
@@ -338,6 +397,8 @@ class _RoadmapArchitectTabState extends State<RoadmapArchitectTab> {
       case 'account_balance': return Icons.account_balance;
       case 'gavel': return Icons.gavel;
       case 'web': return Icons.web;
+      case 'science': return Icons.science;
+      case 'engineering': return Icons.engineering;
       default: return Icons.work;
     }
   }
@@ -376,21 +437,13 @@ class _RoadmapNodeCard extends StatelessWidget {
                 Container(
                   width: 32,
                   height: 32,
-                  decoration: BoxDecoration(
-                    color: _getStepColor(index),
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: _getStepColor(index), shape: BoxShape.circle),
                   child: Center(
                     child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      color: Colors.grey[300],
-                    ),
-                  ),
+                  Expanded(child: Container(width: 2, color: Colors.grey[300])),
               ],
             ),
           ),
@@ -411,9 +464,7 @@ class _RoadmapNodeCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(
-                        child: Text(node.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                      ),
+                      Expanded(child: Text(node.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
                       if (isEditing) ...[
                         IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: onEdit, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                         const SizedBox(width: 8),
