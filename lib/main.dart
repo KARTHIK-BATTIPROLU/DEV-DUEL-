@@ -7,6 +7,7 @@ import 'routes/app_router.dart';
 import 'services/hive_service.dart';
 import 'services/auth_service.dart';
 import 'providers/career_provider.dart';
+import 'providers/theme_provider.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -46,19 +47,28 @@ class CareerCompassApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get initial role from Hive
+    final initialRole = HiveService.getUserRole();
+    
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => CareerProvider()..initialize()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider(initialRole)),
       ],
-      child: MaterialApp.router(
-        title: AppConstants.appName,
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        routerConfig: AppRouter.router,
-        builder: (context, child) {
-          return MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
-            child: child ?? const SizedBox.shrink(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp.router(
+            title: AppConstants.appName,
+            debugShowCheckedModeBanner: false,
+            // Role-based theming: Teacher = Teal, Student = Purple
+            theme: themeProvider.currentTheme,
+            routerConfig: AppRouter.router,
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
           );
         },
       ),
@@ -74,6 +84,7 @@ class InitializationErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
       home: Scaffold(
         body: Center(
           child: Padding(

@@ -3,10 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/teacher_models.dart';
 import '../models/career_model.dart';
-import '../models/user_model.dart';
 
-/// Teacher Service - Handles all teacher management operations
-/// Career Factory, Student Oversight, Academy Management
+/// Teacher Service - REACTIVE Firestore Operations
+/// Source of Truth for Teacher Dashboard
+/// All operations use Streams for real-time sync
 class TeacherService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -15,7 +15,7 @@ class TeacherService {
   TeacherService._internal();
 
   // Collection references
-  CollectionReference get _careersRef => _firestore.collection('managed_careers');
+  CollectionReference get _careersRef => _firestore.collection('careers');
   CollectionReference get _submissionsRef => _firestore.collection('submissions');
   CollectionReference get _careerNotesRef => _firestore.collection('career_notes');
   CollectionReference get _noticesRef => _firestore.collection('notices');
@@ -23,19 +23,21 @@ class TeacherService {
   CollectionReference get _quizzesRef => _firestore.collection('quizzes');
   CollectionReference get _quizAttemptsRef => _firestore.collection('quiz_attempts');
   CollectionReference get _studentActivityRef => _firestore.collection('student_activity');
+  CollectionReference get _doubtsRef => _firestore.collection('doubts');
 
   // ============================================================
-  // CAREER FACTORY - CRUD Operations
+  // CAREER FACTORY - REACTIVE CRUD
   // ============================================================
 
   /// Create a new managed career
-  Future<ManagedCareer> createCareer(ManagedCareer career) async {
+  Future<String> createCareer(ManagedCareer career) async {
     debugPrint('📝 [TeacherService] Creating career: ${career.title}');
     try {
-      final docRef = _careersRef.doc(career.id);
-      await docRef.set(career.toMap());
-      debugPrint('✅ [TeacherService] Career created: ${career.id}');
-      return career;
+      final docRef = await _careersRef.add(career.toMap());
+      // Update with generated ID
+      await docRef.update({'id': docRef.id});
+      debugPrint('✅ [TeacherService] Career created: ${docRef.id}');
+      return docRef.id;
     } catch (e) {
       debugPrint('❌ [TeacherService] Error creating career: $e');
       rethrow;
@@ -43,10 +45,11 @@ class TeacherService {
   }
 
   /// Update an existing career
-  Future<void> updateCareer(ManagedCareer career) async {
-    debugPrint('📝 [TeacherService] Updating career: ${career.id}');
+  Future<void> updateCareer(String careerId, Map<String, dynamic> updates) async {
+    debugPrint('📝 [TeacherService] Updating career: $careerId');
     try {
-      await _careersRef.doc(career.id).update(career.toMap());
+      updates['updatedAt'] = DateTime.now().toIso8601String();
+      await _careersRef.doc(careerId).update(updates);
       debugPrint('✅ [TeacherService] Career updated');
     } catch (e) {
       debugPrint('❌ [TeacherService] Error updating career: $e');
@@ -66,38 +69,41 @@ class TeacherService {
     }
   }
 
-  /// Get all managed careers
-  Future<List<ManagedCareer>> getAllCareers() async {
-    try {
-      final snapshot = await _careersRef.orderBy('title').get();
-      return snapshot.docs.map((doc) => ManagedCareer.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching careers: $e');
-      return [];
-    }
-  }
-
-  /// Stream of all careers (real-time)
+  /// STREAM: All careers (real-time)
   Stream<List<ManagedCareer>> careersStream() {
-    return _careersRef.orderBy('title').snapshots().map((snapshot) =>
-        snapshot.docs.map((doc) => ManagedCareer.fromMap(doc.data() as Map<String, dynamic>)).toList());
+    return _careersRef.orderBy('title').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return ManagedCareer.fromMap(data);
+      }).toList();
+    });
   }
 
-  /// Get careers visible for a specific grade
-  Future<List<ManagedCareer>> getCareersForGrade(int grade) async {
-    try {
-      final careers = await getAllCareers();
-      return careers.where((c) => c.isActive && c.gradeVisibility.isVisibleForGrade(grade)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching careers for grade: $e');
-      return [];
-    }
+  /// STREAM: Careers visible for a specific grade (for Student Dashboard)
+  Stream<List<ManagedCareer>> careersForGradeStream(int grade) {
+    final gradeField = 'gradeVisibility.grade$grade';
+    return _careersRef
+        .where(gradeField, isEqualTo: true)
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return ManagedCareer.fromMap(data);
+      }).toList();
+    });
   }
 
-  /// Update grade visibility for a career
+  /// Update grade visibility for a career (instant sync to students)
   Future<void> updateCareerVisibility(String careerId, GradeVisibility visibility) async {
     try {
-      await _careersRef.doc(careerId).update({'gradeVisibility': visibility.toMap(), 'updatedAt': DateTime.now().toIso8601String()});
+      await _careersRef.doc(careerId).update({
+        'gradeVisibility': visibility.toMap(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
+      debugPrint('✅ [TeacherService] Visibility updated - students will see changes instantly');
     } catch (e) {
       debugPrint('❌ [TeacherService] Error updating visibility: $e');
       rethrow;
@@ -107,57 +113,164 @@ class TeacherService {
   /// Toggle career active status
   Future<void> toggleCareerActive(String careerId, bool isActive) async {
     try {
-      await _careersRef.doc(careerId).update({'isActive': isActive, 'updatedAt': DateTime.now().toIso8601String()});
+      await _careersRef.doc(careerId).update({
+        'isActive': isActive,
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
     } catch (e) {
       debugPrint('❌ [TeacherService] Error toggling career: $e');
       rethrow;
     }
   }
 
-
   // ============================================================
-  // STUDENT SUBMISSIONS & REVIEW
+  // DOUBTS / Q&A ENGINE - REACTIVE
   // ============================================================
 
-  /// Get all pending submissions
-  Future<List<StudentSubmission>> getPendingSubmissions() async {
+  /// Student: Ask a doubt
+  Future<String> askDoubt(Doubt doubt) async {
+    debugPrint('❓ [TeacherService] Student asking doubt');
     try {
-      final snapshot = await _submissionsRef
-          .where('status', isEqualTo: SubmissionStatus.pending.name)
-          .orderBy('submittedAt', descending: true)
-          .get();
-      return snapshot.docs.map((doc) => StudentSubmission.fromMap(doc.data() as Map<String, dynamic>)).toList();
+      final docRef = await _doubtsRef.add(doubt.toMap());
+      await docRef.update({'id': docRef.id});
+      debugPrint('✅ [TeacherService] Doubt submitted: ${docRef.id}');
+      return docRef.id;
     } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching submissions: $e');
-      return [];
+      debugPrint('❌ [TeacherService] Error submitting doubt: $e');
+      rethrow;
     }
   }
 
-  /// Stream of pending submissions (real-time)
+  /// Teacher: Answer a doubt (sets isResolved: true)
+  Future<void> answerDoubt({
+    required String doubtId,
+    required String answer,
+    required String teacherId,
+    required String teacherName,
+  }) async {
+    debugPrint('💬 [TeacherService] Teacher answering doubt: $doubtId');
+    try {
+      await _doubtsRef.doc(doubtId).update({
+        'answer': answer,
+        'answeredBy': teacherId,
+        'answeredByName': teacherName,
+        'isResolved': true,
+        'answeredAt': DateTime.now().toIso8601String(),
+      });
+      debugPrint('✅ [TeacherService] Doubt answered - student will see instantly');
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error answering doubt: $e');
+      rethrow;
+    }
+  }
+
+  /// STREAM: All unresolved doubts (for Teacher's Doubts Hub)
+  Stream<List<Doubt>> unresolvedDoubtsStream() {
+    return _doubtsRef
+        .where('isResolved', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Doubt.fromMap(data);
+      }).toList();
+    });
+  }
+
+  /// STREAM: All doubts (for Teacher)
+  Stream<List<Doubt>> allDoubtsStream() {
+    return _doubtsRef.orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Doubt.fromMap(data);
+      }).toList();
+    });
+  }
+
+  /// STREAM: Student's own doubts (for "My Doubts" page)
+  Stream<List<Doubt>> studentDoubtsStream(String studentId) {
+    return _doubtsRef
+        .where('studentId', isEqualTo: studentId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Doubt.fromMap(data);
+      }).toList();
+    });
+  }
+
+  // ============================================================
+  // STUDENT SUBMISSIONS - REACTIVE
+  // ============================================================
+
+  /// Student: Submit a task/reflection
+  Future<String> submitTask(StudentSubmission submission) async {
+    debugPrint('📤 [TeacherService] Student submitting task');
+    try {
+      final docRef = await _submissionsRef.add(submission.toMap());
+      await docRef.update({'id': docRef.id});
+      debugPrint('✅ [TeacherService] Submission created: ${docRef.id}');
+      return docRef.id;
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error submitting task: $e');
+      rethrow;
+    }
+  }
+
+  /// STREAM: Pending submissions (for Teacher's Review Hub)
   Stream<List<StudentSubmission>> pendingSubmissionsStream() {
     return _submissionsRef
         .where('status', isEqualTo: SubmissionStatus.pending.name)
         .orderBy('submittedAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => StudentSubmission.fromMap(doc.data() as Map<String, dynamic>)).toList());
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return StudentSubmission.fromMap(data);
+      }).toList();
+    });
   }
 
-  /// Get all submissions (with optional status filter)
-  Future<List<StudentSubmission>> getSubmissions({SubmissionStatus? status}) async {
-    try {
-      Query query = _submissionsRef.orderBy('submittedAt', descending: true);
-      if (status != null) {
-        query = query.where('status', isEqualTo: status.name);
-      }
-      final snapshot = await query.get();
-      return snapshot.docs.map((doc) => StudentSubmission.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching submissions: $e');
-      return [];
+  /// STREAM: All submissions with optional status filter
+  Stream<List<StudentSubmission>> submissionsStream({SubmissionStatus? status}) {
+    Query query = _submissionsRef.orderBy('submittedAt', descending: true);
+    if (status != null) {
+      query = _submissionsRef
+          .where('status', isEqualTo: status.name)
+          .orderBy('submittedAt', descending: true);
     }
+    return query.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return StudentSubmission.fromMap(data);
+      }).toList();
+    });
   }
 
-  /// Review a submission (approve/reject/revision)
+  /// STREAM: Student's own submissions
+  Stream<List<StudentSubmission>> studentSubmissionsStream(String studentId) {
+    return _submissionsRef
+        .where('studentId', isEqualTo: studentId)
+        .orderBy('submittedAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return StudentSubmission.fromMap(data);
+      }).toList();
+    });
+  }
+
+  /// Teacher: Review a submission
   Future<void> reviewSubmission({
     required String submissionId,
     required SubmissionStatus newStatus,
@@ -171,7 +284,7 @@ class TeacherService {
         'reviewedAt': DateTime.now().toIso8601String(),
         'reviewedBy': teacherId,
       });
-      debugPrint('✅ [TeacherService] Submission reviewed');
+      debugPrint('✅ [TeacherService] Submission reviewed - student notified instantly');
     } catch (e) {
       debugPrint('❌ [TeacherService] Error reviewing submission: $e');
       rethrow;
@@ -179,136 +292,28 @@ class TeacherService {
   }
 
   // ============================================================
-  // PERSONALIZED CAREER NOTES
-  // ============================================================
-
-  /// Add a career note for a student
-  Future<CareerNote> addCareerNote(CareerNote note) async {
-    try {
-      final docRef = _careerNotesRef.doc(note.id);
-      await docRef.set(note.toMap());
-      debugPrint('✅ [TeacherService] Career note added');
-      return note;
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error adding note: $e');
-      rethrow;
-    }
-  }
-
-  /// Get career notes for a student
-  Future<List<CareerNote>> getCareerNotesForStudent(String studentId) async {
-    try {
-      final snapshot = await _careerNotesRef
-          .where('studentId', isEqualTo: studentId)
-          .orderBy('createdAt', descending: true)
-          .get();
-      return snapshot.docs.map((doc) => CareerNote.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching notes: $e');
-      return [];
-    }
-  }
-
-  /// Stream of career notes for a student (real-time for student dashboard)
-  Stream<List<CareerNote>> careerNotesStream(String studentId) {
-    return _careerNotesRef
-        .where('studentId', isEqualTo: studentId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => CareerNote.fromMap(doc.data() as Map<String, dynamic>)).toList());
-  }
-
-  /// Update a career note
-  Future<void> updateCareerNote(String noteId, String newNote, List<String> recommendedCareers) async {
-    try {
-      await _careerNotesRef.doc(noteId).update({
-        'note': newNote,
-        'recommendedCareers': recommendedCareers,
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error updating note: $e');
-      rethrow;
-    }
-  }
-
-  /// Delete a career note
-  Future<void> deleteCareerNote(String noteId) async {
-    try {
-      await _careerNotesRef.doc(noteId).delete();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error deleting note: $e');
-      rethrow;
-    }
-  }
-
-
-  // ============================================================
-  // NOTICE BOARD
+  // NOTICES - REACTIVE
   // ============================================================
 
   /// Create a notice
-  Future<Notice> createNotice(Notice notice) async {
+  Future<String> createNotice(Notice notice) async {
     try {
-      final docRef = _noticesRef.doc(notice.id);
-      await docRef.set(notice.toMap());
-      debugPrint('✅ [TeacherService] Notice created');
-      return notice;
+      final docRef = await _noticesRef.add(notice.toMap());
+      await docRef.update({'id': docRef.id});
+      debugPrint('✅ [TeacherService] Notice created: ${docRef.id}');
+      return docRef.id;
     } catch (e) {
       debugPrint('❌ [TeacherService] Error creating notice: $e');
       rethrow;
     }
   }
 
-  /// Get all active notices
-  Future<List<Notice>> getActiveNotices() async {
-    try {
-      final snapshot = await _noticesRef
-          .where('isActive', isEqualTo: true)
-          .orderBy('eventDate')
-          .get();
-      return snapshot.docs.map((doc) => Notice.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching notices: $e');
-      return [];
-    }
-  }
-
-  /// Stream of notices (real-time)
-  Stream<List<Notice>> noticesStream() {
-    return _noticesRef
-        .where('isActive', isEqualTo: true)
-        .orderBy('eventDate')
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Notice.fromMap(doc.data() as Map<String, dynamic>)).toList());
-  }
-
-  /// Get notices for a specific grade
-  Future<List<Notice>> getNoticesForGrade(int grade) async {
-    try {
-      final notices = await getActiveNotices();
-      return notices.where((n) => n.targetGrades.isEmpty || n.targetGrades.contains(grade)).toList();
-    } catch (e) {
-      return [];
-    }
-  }
-
   /// Update a notice
-  Future<void> updateNotice(Notice notice) async {
+  Future<void> updateNotice(String noticeId, Map<String, dynamic> updates) async {
     try {
-      await _noticesRef.doc(notice.id).update(notice.toMap());
+      await _noticesRef.doc(noticeId).update(updates);
     } catch (e) {
       debugPrint('❌ [TeacherService] Error updating notice: $e');
-      rethrow;
-    }
-  }
-
-  /// Cancel/deactivate a notice
-  Future<void> cancelNotice(String noticeId) async {
-    try {
-      await _noticesRef.doc(noticeId).update({'isActive': false});
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error canceling notice: $e');
       rethrow;
     }
   }
@@ -323,209 +328,190 @@ class TeacherService {
     }
   }
 
+  /// STREAM: All active notices (for Teacher)
+  Stream<List<Notice>> noticesStream() {
+    return _noticesRef
+        .where('isActive', isEqualTo: true)
+        .orderBy('eventDate')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Notice.fromMap(data);
+      }).toList();
+    });
+  }
+
+  /// STREAM: Notices for a specific grade (for Student's Notice Tab)
+  Stream<List<Notice>> noticesForGradeStream(int grade) {
+    // Get notices where targetGrades is empty (all grades) or contains this grade
+    return _noticesRef
+        .where('isActive', isEqualTo: true)
+        .orderBy('eventDate')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Notice.fromMap(data);
+      }).where((notice) {
+        // Filter: empty targetGrades means all grades, or grade must be in list
+        return notice.targetGrades.isEmpty || notice.targetGrades.contains(grade);
+      }).toList();
+    });
+  }
+
   // ============================================================
-  // OPPORTUNITIES (Scholarships, Competitions, etc.)
+  // OPPORTUNITIES - REACTIVE
   // ============================================================
 
   /// Create an opportunity
-  Future<Opportunity> createOpportunity(Opportunity opportunity) async {
+  Future<String> createOpportunity(Opportunity opportunity) async {
     try {
-      final docRef = _opportunitiesRef.doc(opportunity.id);
-      await docRef.set(opportunity.toMap());
-      debugPrint('✅ [TeacherService] Opportunity created');
-      return opportunity;
+      final docRef = await _opportunitiesRef.add(opportunity.toMap());
+      await docRef.update({'id': docRef.id});
+      return docRef.id;
     } catch (e) {
       debugPrint('❌ [TeacherService] Error creating opportunity: $e');
       rethrow;
     }
   }
 
-  /// Get all active opportunities
-  Future<List<Opportunity>> getActiveOpportunities() async {
-    try {
-      final snapshot = await _opportunitiesRef
-          .where('isActive', isEqualTo: true)
-          .orderBy('deadline')
-          .get();
-      return snapshot.docs.map((doc) => Opportunity.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching opportunities: $e');
-      return [];
-    }
-  }
-
-  /// Stream of opportunities (real-time)
+  /// STREAM: All opportunities
   Stream<List<Opportunity>> opportunitiesStream() {
     return _opportunitiesRef
         .where('isActive', isEqualTo: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => Opportunity.fromMap(doc.data() as Map<String, dynamic>)).toList());
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Opportunity.fromMap(data);
+      }).toList();
+    });
   }
 
-  /// Get opportunities for a specific grade
-  Future<List<Opportunity>> getOpportunitiesForGrade(int grade) async {
-    try {
-      final opportunities = await getActiveOpportunities();
-      return opportunities.where((o) => o.targetGrades.isEmpty || o.targetGrades.contains(grade)).toList();
-    } catch (e) {
-      return [];
-    }
+  /// STREAM: Opportunities for a specific grade
+  Stream<List<Opportunity>> opportunitiesForGradeStream(int grade) {
+    return _opportunitiesRef
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Opportunity.fromMap(data);
+      }).where((opp) {
+        return opp.targetGrades.isEmpty || opp.targetGrades.contains(grade);
+      }).toList();
+    });
   }
-
-  /// Update an opportunity
-  Future<void> updateOpportunity(Opportunity opportunity) async {
-    try {
-      await _opportunitiesRef.doc(opportunity.id).update(opportunity.toMap());
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error updating opportunity: $e');
-      rethrow;
-    }
-  }
-
-  /// Delete an opportunity
-  Future<void> deleteOpportunity(String opportunityId) async {
-    try {
-      await _opportunitiesRef.doc(opportunityId).delete();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error deleting opportunity: $e');
-      rethrow;
-    }
-  }
-
 
   // ============================================================
-  // QUIZ / ASSESSMENT LAB
+  // CAREER NOTES - REACTIVE
+  // ============================================================
+
+  /// Add a career note for a student
+  Future<String> addCareerNote(CareerNote note) async {
+    try {
+      final docRef = await _careerNotesRef.add(note.toMap());
+      await docRef.update({'id': docRef.id});
+      return docRef.id;
+    } catch (e) {
+      debugPrint('❌ [TeacherService] Error adding note: $e');
+      rethrow;
+    }
+  }
+
+  /// STREAM: Career notes for a student (syncs to student dashboard)
+  Stream<List<CareerNote>> careerNotesStream(String studentId) {
+    return _careerNotesRef
+        .where('studentId', isEqualTo: studentId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return CareerNote.fromMap(data);
+      }).toList();
+    });
+  }
+
+  // ============================================================
+  // QUIZZES - REACTIVE
   // ============================================================
 
   /// Create a quiz
-  Future<Quiz> createQuiz(Quiz quiz) async {
+  Future<String> createQuiz(Quiz quiz) async {
     try {
-      final docRef = _quizzesRef.doc(quiz.id);
-      await docRef.set(quiz.toMap());
-      debugPrint('✅ [TeacherService] Quiz created');
-      return quiz;
+      final docRef = await _quizzesRef.add(quiz.toMap());
+      await docRef.update({'id': docRef.id});
+      return docRef.id;
     } catch (e) {
       debugPrint('❌ [TeacherService] Error creating quiz: $e');
       rethrow;
     }
   }
 
-  /// Get all quizzes
-  Future<List<Quiz>> getAllQuizzes() async {
-    try {
-      final snapshot = await _quizzesRef.orderBy('createdAt', descending: true).get();
-      return snapshot.docs.map((doc) => Quiz.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching quizzes: $e');
-      return [];
-    }
+  /// STREAM: All quizzes
+  Stream<List<Quiz>> quizzesStream() {
+    return _quizzesRef.orderBy('createdAt', descending: true).snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Quiz.fromMap(data);
+      }).toList();
+    });
   }
 
-  /// Get quizzes for a specific grade
-  Future<List<Quiz>> getQuizzesForGrade(int grade) async {
-    try {
-      final quizzes = await getAllQuizzes();
-      return quizzes.where((q) => q.isActive && (q.targetGrades.isEmpty || q.targetGrades.contains(grade))).toList();
-    } catch (e) {
-      return [];
-    }
+  /// STREAM: Quizzes for a specific grade
+  Stream<List<Quiz>> quizzesForGradeStream(int grade) {
+    return _quizzesRef
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return Quiz.fromMap(data);
+      }).where((quiz) {
+        return quiz.targetGrades.isEmpty || quiz.targetGrades.contains(grade);
+      }).toList();
+    });
   }
 
-  /// Update a quiz
-  Future<void> updateQuiz(Quiz quiz) async {
+  /// Submit quiz attempt
+  Future<String> submitQuizAttempt(QuizAttempt attempt) async {
     try {
-      await _quizzesRef.doc(quiz.id).update(quiz.toMap());
+      final docRef = await _quizAttemptsRef.add(attempt.toMap());
+      await docRef.update({'id': docRef.id});
+      return docRef.id;
     } catch (e) {
-      debugPrint('❌ [TeacherService] Error updating quiz: $e');
+      debugPrint('❌ [TeacherService] Error submitting attempt: $e');
       rethrow;
     }
   }
 
-  /// Delete a quiz
-  Future<void> deleteQuiz(String quizId) async {
-    try {
-      await _quizzesRef.doc(quizId).delete();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error deleting quiz: $e');
-      rethrow;
-    }
-  }
-
-  /// Get quiz attempts for a specific quiz
-  Future<List<QuizAttempt>> getQuizAttempts(String quizId) async {
-    try {
-      final snapshot = await _quizAttemptsRef
-          .where('quizId', isEqualTo: quizId)
-          .orderBy('attemptedAt', descending: true)
-          .get();
-      return snapshot.docs.map((doc) => QuizAttempt.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching attempts: $e');
-      return [];
-    }
-  }
-
-  /// Get quiz attempts for a specific student
-  Future<List<QuizAttempt>> getStudentQuizAttempts(String studentId) async {
-    try {
-      final snapshot = await _quizAttemptsRef
-          .where('studentId', isEqualTo: studentId)
-          .orderBy('attemptedAt', descending: true)
-          .get();
-      return snapshot.docs.map((doc) => QuizAttempt.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching student attempts: $e');
-      return [];
-    }
+  /// STREAM: Quiz attempts for a quiz
+  Stream<List<QuizAttempt>> quizAttemptsStream(String quizId) {
+    return _quizAttemptsRef
+        .where('quizId', isEqualTo: quizId)
+        .orderBy('attemptedAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return QuizAttempt.fromMap(data);
+      }).toList();
+    });
   }
 
   // ============================================================
-  // STUDENT ACTIVITY & ANALYTICS
+  // STUDENT ACTIVITY - REACTIVE
   // ============================================================
-
-  /// Get all student activities
-  Future<List<StudentActivity>> getAllStudentActivities() async {
-    try {
-      final snapshot = await _studentActivityRef.orderBy('lastLoginAt', descending: true).get();
-      return snapshot.docs.map((doc) => StudentActivity.fromMap(doc.data() as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching activities: $e');
-      return [];
-    }
-  }
-
-  /// Get inactive students (>7 days)
-  Future<List<StudentActivity>> getInactiveStudents() async {
-    try {
-      final activities = await getAllStudentActivities();
-      return activities.where((a) => a.isInactive).toList();
-    } catch (e) {
-      return [];
-    }
-  }
-
-  /// Get student activity by ID
-  Future<StudentActivity?> getStudentActivity(String studentId) async {
-    try {
-      final doc = await _studentActivityRef.doc(studentId).get();
-      if (doc.exists) {
-        return StudentActivity.fromMap(doc.data() as Map<String, dynamic>);
-      }
-      return null;
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error fetching activity: $e');
-      return null;
-    }
-  }
-
-  /// Update student activity (called when student performs actions)
-  Future<void> updateStudentActivity(StudentActivity activity) async {
-    try {
-      await _studentActivityRef.doc(activity.studentId).set(activity.toMap(), SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('❌ [TeacherService] Error updating activity: $e');
-    }
-  }
 
   /// Record student login
   Future<void> recordStudentLogin(String studentId, String studentName, int grade) async {
@@ -553,21 +539,44 @@ class TeacherService {
     }
   }
 
-  /// Record task completion
-  Future<void> recordTaskCompletion(String studentId) async {
+  /// STREAM: All student activities
+  Stream<List<StudentActivity>> studentActivitiesStream() {
+    return _studentActivityRef.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return StudentActivity.fromMap(data);
+      }).toList();
+    });
+  }
+
+  /// STREAM: Inactive students (>7 days)
+  Stream<List<StudentActivity>> inactiveStudentsStream() {
+    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+    return _studentActivityRef.snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return StudentActivity.fromMap(data);
+      }).where((activity) => activity.isInactive).toList();
+    });
+  }
+
+  /// Get all student activities (non-stream version for initial load)
+  Future<List<StudentActivity>> getAllStudentActivities() async {
     try {
-      await _studentActivityRef.doc(studentId).update({
-        'tasksCompleted': FieldValue.increment(1),
-      });
+      final snapshot = await _studentActivityRef.get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return StudentActivity.fromMap(data);
+      }).toList();
     } catch (e) {
-      debugPrint('❌ [TeacherService] Error recording task: $e');
+      debugPrint('❌ [TeacherService] Error fetching activities: $e');
+      return [];
     }
   }
 
   // ============================================================
-  // UTILITY METHODS
+  // UTILITY
   // ============================================================
 
-  /// Generate unique ID
   String generateId() => _firestore.collection('_').doc().id;
 }

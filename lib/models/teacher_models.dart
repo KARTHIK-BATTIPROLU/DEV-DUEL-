@@ -832,3 +832,92 @@ class StudentActivity {
 
 
 
+
+// ============================================================
+// DOUBT / Q&A MODEL
+// ============================================================
+class Doubt {
+  final String id;
+  final String studentId;
+  final String studentName;
+  final int studentGrade;
+  final String question;
+  final String? careerId;
+  final String? careerTitle;
+  final String? answer;
+  final String? answeredBy;
+  final String? answeredByName;
+  final bool isResolved;
+  final DateTime createdAt;
+  final DateTime? answeredAt;
+
+  Doubt({
+    required this.id,
+    required this.studentId,
+    required this.studentName,
+    required this.studentGrade,
+    required this.question,
+    this.careerId,
+    this.careerTitle,
+    this.answer,
+    this.answeredBy,
+    this.answeredByName,
+    this.isResolved = false,
+    required this.createdAt,
+    this.answeredAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'studentId': studentId,
+    'studentName': studentName,
+    'studentGrade': studentGrade,
+    'question': question,
+    'careerId': careerId,
+    'careerTitle': careerTitle,
+    'answer': answer,
+    'answeredBy': answeredBy,
+    'answeredByName': answeredByName,
+    'isResolved': isResolved,
+    'createdAt': createdAt.toIso8601String(),
+    'answeredAt': answeredAt?.toIso8601String(),
+  };
+
+  factory Doubt.fromMap(Map<String, dynamic> map) => Doubt(
+    id: map['id'] ?? '',
+    studentId: map['studentId'] ?? '',
+    studentName: map['studentName'] ?? '',
+    studentGrade: map['studentGrade'] ?? 7,
+    question: map['question'] ?? '',
+    careerId: map['careerId'],
+    careerTitle: map['careerTitle'],
+    answer: map['answer'],
+    answeredBy: map['answeredBy'],
+    answeredByName: map['answeredByName'],
+    isResolved: map['isResolved'] ?? false,
+    createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
+    answeredAt: map['answeredAt'] != null ? DateTime.tryParse(map['answeredAt']) : null,
+  );
+
+  Doubt copyWith({
+    String? answer,
+    String? answeredBy,
+    String? answeredByName,
+    bool? isResolved,
+    DateTime? answeredAt,
+  }) => Doubt(
+    id: id,
+    studentId: studentId,
+    studentName: studentName,
+    studentGrade: studentGrade,
+    question: question,
+    careerId: careerId,
+    careerTitle: careerTitle,
+    answer: answer ?? this.answer,
+    answeredBy: answeredBy ?? this.answeredBy,
+    answeredByName: answeredByName ?? this.answeredByName,
+    isResolved: isResolved ?? this.isResolved,
+    createdAt: createdAt,
+    answeredAt: answeredAt ?? this.answeredAt,
+  );
+}

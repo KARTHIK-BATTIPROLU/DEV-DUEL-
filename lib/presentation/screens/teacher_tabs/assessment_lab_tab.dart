@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/teacher_models.dart';
 import '../../../services/teacher_service.dart';
+import '../../../services/hive_service.dart';
+import '../../../models/user_model.dart';
 
 /// Assessment Lab Tab - Quiz Builder and Management
 class AssessmentLabTab extends StatefulWidget {
@@ -13,77 +15,39 @@ class AssessmentLabTab extends StatefulWidget {
 
 class _AssessmentLabTabState extends State<AssessmentLabTab> {
   final _teacherService = TeacherService();
-  List<Quiz> _quizzes = [];
-  bool _isLoading = true;
-
-  // Sample quizzes for demonstration
-  final List<Quiz> _sampleQuizzes = [
-    Quiz(
-      id: 'quiz1',
-      title: 'Career Awareness Quiz',
-      description: 'Test your knowledge about different career paths',
-      targetGrades: [7, 8],
-      questions: [
-        QuizQuestion(question: 'What does a Software Engineer do?', options: ['Builds software', 'Treats patients', 'Teaches students', 'Designs buildings'], correctIndex: 0),
-        QuizQuestion(question: 'Which stream is required for Medicine?', options: ['MPC', 'BiPC', 'Commerce', 'Arts'], correctIndex: 1),
-      ],
-      timeLimitMinutes: 10,
-      createdAt: DateTime.now().subtract(const Duration(days: 5)),
-      createdBy: 'teacher1',
-    ),
-    Quiz(
-      id: 'quiz2',
-      title: 'Stream Selection Assessment',
-      description: 'Evaluate your understanding of different academic streams',
-      targetGrades: [9, 10],
-      questions: [
-        QuizQuestion(question: 'MPC stands for?', options: ['Maths Physics Chemistry', 'Medical Practice Course', 'Management Program Certificate', 'None'], correctIndex: 0),
-        QuizQuestion(question: 'Which exam is for Engineering?', options: ['NEET', 'JEE', 'CLAT', 'CAT'], correctIndex: 1),
-        QuizQuestion(question: 'BiPC is required for?', options: ['Engineering', 'Medicine', 'Law', 'Business'], correctIndex: 1),
-      ],
-      timeLimitMinutes: 15,
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      createdBy: 'teacher1',
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadQuizzes();
-  }
-
-  Future<void> _loadQuizzes() async {
-    setState(() => _isLoading = true);
-    // In production, fetch from Firestore
-    _quizzes = _sampleQuizzes;
-    setState(() => _isLoading = false);
-  }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _quizzes.isEmpty
-                ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _quizzes.length,
-                    itemBuilder: (context, index) => _QuizCard(
-                      quiz: _quizzes[index],
-                      onEdit: () => _showQuizBuilder(_quizzes[index]),
-                      onViewResults: () => _showQuizResults(_quizzes[index]),
-                      onDelete: () => _deleteQuiz(_quizzes[index].id),
-                    ),
-                  ),
+        // Use StreamBuilder for real-time quiz list
+        StreamBuilder<List<Quiz>>(
+          stream: _teacherService.quizzesStream(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final quizzes = snapshot.data ?? [];
+            if (quizzes.isEmpty) {
+              return _buildEmptyState();
+            }
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: quizzes.length,
+              itemBuilder: (context, index) => _QuizCard(
+                quiz: quizzes[index],
+                onEdit: () => _showQuizBuilder(quizzes[index]),
+                onViewResults: () => _showQuizResults(quizzes[index]),
+                onDelete: () => _deleteQuiz(quizzes[index].id),
+              ),
+            );
+          },
+        ),
         Positioned(
           bottom: 16,
           right: 16,
           child: FloatingActionButton.extended(
             onPressed: () => _showQuizBuilder(null),
-            backgroundColor: AppTheme.teacherColor,
             icon: const Icon(Icons.add),
             label: const Text('Create Quiz'),
           ),
@@ -97,11 +61,11 @@ class _AssessmentLabTabState extends State<AssessmentLabTab> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.quiz, size: 64, color: Colors.grey[300]),
+          Icon(Icons.quiz, size: 64, color: AppTheme.textHint),
           const SizedBox(height: 16),
           const Text('No quizzes yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
           const SizedBox(height: 8),
-          Text('Create your first assessment', style: TextStyle(color: Colors.grey[600])),
+          Text('Create your first assessment', style: TextStyle(color: AppTheme.textSecondary)),
         ],
       ),
     );
@@ -110,21 +74,7 @@ class _AssessmentLabTabState extends State<AssessmentLabTab> {
   void _showQuizBuilder(Quiz? existingQuiz) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => _QuizBuilderScreen(
-          existingQuiz: existingQuiz,
-          onSave: (quiz) {
-            setState(() {
-              if (existingQuiz != null) {
-                final index = _quizzes.indexWhere((q) => q.id == existingQuiz.id);
-                if (index != -1) _quizzes[index] = quiz;
-              } else {
-                _quizzes.add(quiz);
-              }
-            });
-          },
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => QuizBuilderScreen(existingQuiz: existingQuiz)),
     );
   }
 
@@ -137,26 +87,37 @@ class _AssessmentLabTabState extends State<AssessmentLabTab> {
     );
   }
 
-  void _deleteQuiz(String quizId) async {
+  Future<void> _deleteQuiz(String quizId) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Quiz'),
         content: const Text('Are you sure you want to delete this quiz?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
     if (confirmed == true) {
-      setState(() => _quizzes.removeWhere((q) => q.id == quizId));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Quiz deleted')));
+      try {
+        await _teacherService.deleteQuiz(quizId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: const Text('Quiz deleted'), backgroundColor: AppTheme.successColor),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
+          );
+        }
       }
     }
   }
@@ -175,23 +136,19 @@ class _QuizCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-      ),
+      decoration: AppTheme.elevatedCardDecoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppTheme.teacherColor.withOpacity(0.1),
+              color: AppTheme.secondaryColor.withOpacity(0.1),
               borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), topRight: Radius.circular(12)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.quiz, color: AppTheme.teacherColor),
+                Icon(Icons.quiz, color: AppTheme.secondaryColor),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -199,7 +156,7 @@ class _QuizCard extends StatelessWidget {
                     children: [
                       Text(quiz.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
                       Text('${quiz.questions.length} questions • ${quiz.timeLimitMinutes} min',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                          style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                     ],
                   ),
                 ),
@@ -214,7 +171,7 @@ class _QuizCard extends StatelessWidget {
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Edit')])),
                     const PopupMenuItem(value: 'results', child: Row(children: [Icon(Icons.analytics, size: 18), SizedBox(width: 8), Text('Results')])),
-                    const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.red), SizedBox(width: 8), Text('Delete', style: TextStyle(color: Colors.red))])),
+                    PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 18, color: AppTheme.errorColor), const SizedBox(width: 8), Text('Delete', style: TextStyle(color: AppTheme.errorColor))])),
                   ],
                 ),
               ],
@@ -225,7 +182,7 @@ class _QuizCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(quiz.description, style: TextStyle(color: Colors.grey[700])),
+                Text(quiz.description, style: TextStyle(color: AppTheme.textSecondary)),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -244,29 +201,31 @@ class _QuizCard extends StatelessWidget {
   Widget _buildGradeChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-      child: Text(label, style: const TextStyle(fontSize: 12, color: Colors.blue)),
+      decoration: BoxDecoration(color: AppTheme.secondaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+      child: Text(label, style: TextStyle(fontSize: 12, color: AppTheme.secondaryColor)),
     );
   }
 }
 
-/// Quiz Builder Screen
-class _QuizBuilderScreen extends StatefulWidget {
-  final Quiz? existingQuiz;
-  final Function(Quiz) onSave;
 
-  const _QuizBuilderScreen({this.existingQuiz, required this.onSave});
+/// Quiz Builder Screen - FIXED: Stable TextEditingControllers
+class QuizBuilderScreen extends StatefulWidget {
+  final Quiz? existingQuiz;
+
+  const QuizBuilderScreen({super.key, this.existingQuiz});
 
   @override
-  State<_QuizBuilderScreen> createState() => _QuizBuilderScreenState();
+  State<QuizBuilderScreen> createState() => _QuizBuilderScreenState();
 }
 
-class _QuizBuilderScreenState extends State<_QuizBuilderScreen> {
+class _QuizBuilderScreenState extends State<QuizBuilderScreen> {
+  final _teacherService = TeacherService();
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
-  final List<QuizQuestion> _questions = [];
+  final List<_QuestionData> _questions = [];
   final Set<int> _targetGrades = {};
   int _timeLimit = 15;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -274,10 +233,23 @@ class _QuizBuilderScreenState extends State<_QuizBuilderScreen> {
     if (widget.existingQuiz != null) {
       _titleController.text = widget.existingQuiz!.title;
       _descController.text = widget.existingQuiz!.description;
-      _questions.addAll(widget.existingQuiz!.questions);
       _targetGrades.addAll(widget.existingQuiz!.targetGrades);
       _timeLimit = widget.existingQuiz!.timeLimitMinutes;
+      // Initialize questions with stable controllers
+      for (final q in widget.existingQuiz!.questions) {
+        _questions.add(_QuestionData.fromQuestion(q));
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descController.dispose();
+    for (final q in _questions) {
+      q.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -285,35 +257,36 @@ class _QuizBuilderScreenState extends State<_QuizBuilderScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existingQuiz == null ? 'Create Quiz' : 'Edit Quiz'),
-        backgroundColor: AppTheme.teacherColor,
-        foregroundColor: Colors.white,
         actions: [
           TextButton(
-            onPressed: _saveQuiz,
-            child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            onPressed: _isSaving ? null : _saveQuiz,
+            child: _isSaving
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextField(
               controller: _titleController,
-              decoration: const InputDecoration(labelText: 'Quiz Title', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Quiz Title', hintText: 'e.g., Career Awareness Quiz'),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _descController,
               maxLines: 2,
-              decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Description', hintText: 'Brief description of the quiz'),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             const Text('Target Grades', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [7, 8, 9, 10, 11, 12].map((grade) {
                 final isSelected = _targetGrades.contains(grade);
                 return FilterChip(
@@ -325,7 +298,8 @@ class _QuizBuilderScreenState extends State<_QuizBuilderScreen> {
                       else _targetGrades.remove(grade);
                     });
                   },
-                  selectedColor: AppTheme.teacherColor.withOpacity(0.2),
+                  selectedColor: AppTheme.secondaryColor.withOpacity(0.2),
+                  checkmarkColor: AppTheme.secondaryColor,
                 );
               }).toList(),
             ),
@@ -333,6 +307,7 @@ class _QuizBuilderScreenState extends State<_QuizBuilderScreen> {
             Row(
               children: [
                 const Text('Time Limit: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
                 DropdownButton<int>(
                   value: _timeLimit,
                   items: [5, 10, 15, 20, 30, 45, 60].map((m) => DropdownMenuItem(value: m, child: Text('$m min'))).toList(),
@@ -349,23 +324,32 @@ class _QuizBuilderScreenState extends State<_QuizBuilderScreen> {
                   onPressed: _addQuestion,
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add Question'),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teacherColor),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            ..._questions.asMap().entries.map((entry) => _QuestionEditor(
+            const SizedBox(height: 16),
+            ..._questions.asMap().entries.map((entry) => _QuestionEditorCard(
+              key: ValueKey(entry.value.id),
               index: entry.key,
-              question: entry.value,
-              onUpdate: (q) => setState(() => _questions[entry.key] = q),
-              onDelete: () => setState(() => _questions.removeAt(entry.key)),
+              data: entry.value,
+              onDelete: () => _deleteQuestion(entry.key),
+              onCorrectChanged: (index) {
+                setState(() => entry.value.correctIndex = index);
+              },
             )),
             if (_questions.isEmpty)
               Container(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(40),
                 alignment: Alignment.center,
-                child: Text('No questions added yet', style: TextStyle(color: Colors.grey[500])),
+                child: Column(
+                  children: [
+                    Icon(Icons.quiz_outlined, size: 48, color: AppTheme.textHint),
+                    const SizedBox(height: 12),
+                    Text('No questions added yet', style: TextStyle(color: AppTheme.textSecondary)),
+                  ],
+                ),
               ),
+            const SizedBox(height: 80),
           ],
         ),
       ),
@@ -374,45 +358,123 @@ class _QuizBuilderScreenState extends State<_QuizBuilderScreen> {
 
   void _addQuestion() {
     setState(() {
-      _questions.add(QuizQuestion(question: '', options: ['', '', '', ''], correctIndex: 0));
+      _questions.add(_QuestionData());
     });
   }
 
-  void _saveQuiz() {
-    if (_titleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a title')));
+  void _deleteQuestion(int index) {
+    setState(() {
+      _questions[index].dispose();
+      _questions.removeAt(index);
+    });
+  }
+
+  Future<void> _saveQuiz() async {
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text('Please enter a title'), backgroundColor: AppTheme.errorColor),
+      );
       return;
     }
     if (_questions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please add at least one question')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text('Please add at least one question'), backgroundColor: AppTheme.errorColor),
+      );
       return;
     }
 
-    final quiz = Quiz(
-      id: widget.existingQuiz?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      title: _titleController.text,
-      description: _descController.text,
-      targetGrades: _targetGrades.toList(),
-      questions: _questions,
-      timeLimitMinutes: _timeLimit,
-      createdAt: widget.existingQuiz?.createdAt ?? DateTime.now(),
-      createdBy: 'teacher1',
-    );
+    setState(() => _isSaving = true);
 
-    widget.onSave(quiz);
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Quiz saved successfully!')));
+    try {
+      final teacher = HiveService.getTeacher();
+      final questions = _questions.map((q) => QuizQuestion(
+        question: q.questionController.text,
+        options: q.optionControllers.map((c) => c.text).toList(),
+        correctIndex: q.correctIndex,
+      )).toList();
+
+      final quiz = Quiz(
+        id: widget.existingQuiz?.id ?? '',
+        title: _titleController.text.trim(),
+        description: _descController.text.trim(),
+        targetGrades: _targetGrades.toList(),
+        questions: questions,
+        timeLimitMinutes: _timeLimit,
+        isActive: true,
+        createdAt: widget.existingQuiz?.createdAt ?? DateTime.now(),
+        createdBy: teacher?.uid ?? '',
+      );
+
+      if (widget.existingQuiz != null) {
+        await _teacherService.updateQuiz(quiz);
+      } else {
+        await _teacherService.createQuiz(quiz);
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: const Text('Quiz saved successfully!'), backgroundColor: AppTheme.successColor),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 }
 
-/// Question Editor Widget
-class _QuestionEditor extends StatelessWidget {
-  final int index;
-  final QuizQuestion question;
-  final Function(QuizQuestion) onUpdate;
-  final VoidCallback onDelete;
 
-  const _QuestionEditor({required this.index, required this.question, required this.onUpdate, required this.onDelete});
+/// Question Data - Holds stable controllers for each question
+class _QuestionData {
+  final String id;
+  final TextEditingController questionController;
+  final List<TextEditingController> optionControllers;
+  int correctIndex;
+
+  _QuestionData()
+      : id = DateTime.now().microsecondsSinceEpoch.toString(),
+        questionController = TextEditingController(),
+        optionControllers = List.generate(4, (_) => TextEditingController()),
+        correctIndex = 0;
+
+  factory _QuestionData.fromQuestion(QuizQuestion q) {
+    final data = _QuestionData();
+    data.questionController.text = q.question;
+    for (int i = 0; i < q.options.length && i < 4; i++) {
+      data.optionControllers[i].text = q.options[i];
+    }
+    data.correctIndex = q.correctIndex;
+    return data;
+  }
+
+  void dispose() {
+    questionController.dispose();
+    for (final c in optionControllers) {
+      c.dispose();
+    }
+  }
+}
+
+/// Question Editor Card - Uses stable controllers (NO reverse typing)
+class _QuestionEditorCard extends StatelessWidget {
+  final int index;
+  final _QuestionData data;
+  final VoidCallback onDelete;
+  final Function(int) onCorrectChanged;
+
+  const _QuestionEditorCard({
+    super.key,
+    required this.index,
+    required this.data,
+    required this.onDelete,
+    required this.onCorrectChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -420,54 +482,65 @@ class _QuestionEditor extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: AppTheme.surfaceVariant.withOpacity(0.5),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: AppTheme.outlineColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              CircleAvatar(radius: 14, backgroundColor: AppTheme.teacherColor, child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 12))),
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: AppTheme.secondaryColor,
+                child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
               const SizedBox(width: 8),
               const Text('Question', style: TextStyle(fontWeight: FontWeight.w600)),
               const Spacer(),
-              IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 20), onPressed: onDelete),
+              IconButton(
+                icon: Icon(Icons.delete, color: AppTheme.errorColor, size: 20),
+                onPressed: onDelete,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: TextEditingController(text: question.question),
-            decoration: const InputDecoration(hintText: 'Enter question', border: OutlineInputBorder(), isDense: true),
-            onChanged: (v) => onUpdate(QuizQuestion(question: v, options: question.options, correctIndex: question.correctIndex)),
-          ),
           const SizedBox(height: 12),
+          TextField(
+            controller: data.questionController,
+            decoration: const InputDecoration(hintText: 'Enter your question here...', isDense: true),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          const Text('Options (select correct answer)', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+          const SizedBox(height: 8),
           ...List.generate(4, (i) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
                 Radio<int>(
                   value: i,
-                  groupValue: question.correctIndex,
-                  onChanged: (v) => onUpdate(QuizQuestion(question: question.question, options: question.options, correctIndex: v!)),
-                  activeColor: Colors.green,
+                  groupValue: data.correctIndex,
+                  onChanged: (v) => onCorrectChanged(v!),
+                  activeColor: AppTheme.successColor,
                 ),
                 Expanded(
                   child: TextField(
-                    controller: TextEditingController(text: question.options[i]),
+                    controller: data.optionControllers[i],
                     decoration: InputDecoration(
                       hintText: 'Option ${i + 1}',
-                      border: const OutlineInputBorder(),
                       isDense: true,
-                      fillColor: question.correctIndex == i ? Colors.green.withOpacity(0.1) : null,
-                      filled: question.correctIndex == i,
+                      fillColor: data.correctIndex == i ? AppTheme.successColor.withOpacity(0.1) : null,
+                      filled: data.correctIndex == i,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: data.correctIndex == i ? AppTheme.successColor : AppTheme.outlineColor,
+                        ),
+                      ),
                     ),
-                    onChanged: (v) {
-                      final newOptions = List<String>.from(question.options);
-                      newOptions[i] = v;
-                      onUpdate(QuizQuestion(question: question.question, options: newOptions, correctIndex: question.correctIndex));
-                    },
                   ),
                 ),
               ],
@@ -482,17 +555,11 @@ class _QuestionEditor extends StatelessWidget {
 /// Quiz Results Sheet
 class _QuizResultsSheet extends StatelessWidget {
   final Quiz quiz;
-
   const _QuizResultsSheet({required this.quiz});
 
   @override
   Widget build(BuildContext context) {
-    // Sample results for demonstration
-    final sampleResults = [
-      {'name': 'Rahul Sharma', 'grade': 10, 'score': 3, 'total': quiz.questions.length},
-      {'name': 'Priya Patel', 'grade': 9, 'score': 2, 'total': quiz.questions.length},
-      {'name': 'Amit Kumar', 'grade': 10, 'score': 3, 'total': quiz.questions.length},
-    ];
+    final teacherService = TeacherService();
 
     return DraggableScrollableSheet(
       initialChildSize: 0.7,
@@ -509,58 +576,75 @@ class _QuizResultsSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.teacherColor.withOpacity(0.1),
+                color: AppTheme.secondaryColor.withOpacity(0.1),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 children: [
-                  Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+                  Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.outlineColor, borderRadius: BorderRadius.circular(2))),
                   const SizedBox(height: 16),
                   Text(quiz.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text('${sampleResults.length} attempts', style: TextStyle(color: Colors.grey[600])),
                 ],
               ),
             ),
             Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: sampleResults.length,
-                itemBuilder: (context, index) {
-                  final result = sampleResults[index];
-                  final percentage = ((result['score'] as int) / (result['total'] as int) * 100).round();
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
+              child: StreamBuilder<List<QuizAttempt>>(
+                stream: teacherService.quizAttemptsStream(quiz.id),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final attempts = snapshot.data ?? [];
+                  if (attempts.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.analytics_outlined, size: 48, color: AppTheme.textHint),
+                          const SizedBox(height: 12),
+                          Text('No attempts yet', style: TextStyle(color: AppTheme.textSecondary)),
+                        ],
+                      ),
+                    );
+                  }
+                  return ListView.builder(
+                    controller: scrollController,
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: _getScoreColor(percentage).withOpacity(0.1),
-                          child: Text((result['name'] as String)[0], style: TextStyle(color: _getScoreColor(percentage))),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(result['name'] as String, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              Text('Grade ${result['grade']}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                            ],
-                          ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                    itemCount: attempts.length,
+                    itemBuilder: (context, index) {
+                      final attempt = attempts[index];
+                      final percentage = attempt.percentage.round();
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: AppTheme.cardDecoration,
+                        child: Row(
                           children: [
-                            Text('${result['score']}/${result['total']}', style: TextStyle(fontWeight: FontWeight.bold, color: _getScoreColor(percentage))),
-                            Text('$percentage%', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                            CircleAvatar(
+                              backgroundColor: _getScoreColor(percentage).withOpacity(0.1),
+                              child: Text('${attempt.score}', style: TextStyle(color: _getScoreColor(percentage), fontWeight: FontWeight.bold)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Student ID: ${attempt.studentId.substring(0, 8)}...', style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  Text('${attempt.score}/${attempt.totalQuestions} correct', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('$percentage%', style: TextStyle(fontWeight: FontWeight.bold, color: _getScoreColor(percentage))),
+                                Text('${(attempt.timeTakenSeconds / 60).toStringAsFixed(1)} min', style: TextStyle(fontSize: 11, color: AppTheme.textHint)),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 },
               ),
@@ -572,8 +656,8 @@ class _QuizResultsSheet extends StatelessWidget {
   }
 
   Color _getScoreColor(int percentage) {
-    if (percentage >= 80) return Colors.green;
-    if (percentage >= 60) return Colors.orange;
-    return Colors.red;
+    if (percentage >= 80) return AppTheme.successColor;
+    if (percentage >= 60) return AppTheme.warningColor;
+    return AppTheme.errorColor;
   }
 }

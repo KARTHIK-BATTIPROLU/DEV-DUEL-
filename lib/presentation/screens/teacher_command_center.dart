@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/route_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/hive_service.dart';
+import '../../providers/theme_provider.dart';
 import 'teacher_tabs/career_factory_tab.dart';
 import 'teacher_tabs/review_hub_tab.dart';
 import 'teacher_tabs/notice_board_tab.dart';
 import 'teacher_tabs/analytics_tab.dart';
 import 'teacher_tabs/assessment_lab_tab.dart';
 import 'teacher_tabs/roadmap_architect_tab.dart';
+import 'teacher_tabs/doubts_hub_tab.dart';
 import 'class_students_screen.dart';
 import '../../core/constants/app_constants.dart';
 
 /// Teacher Command Center - Main hub for teacher management
-/// 7 Tabs: Students, Careers, Roadmaps, Reviews, Notices, Quizzes, Analytics
+/// 8 Tabs: Students, Careers, Roadmaps, Reviews, Doubts, Notices, Quizzes, Analytics
 class TeacherCommandCenter extends StatefulWidget {
   const TeacherCommandCenter({super.key});
 
@@ -30,17 +33,11 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
   List<StudentModel> _students = [];
   bool _isLoading = true;
   late TabController _tabController;
-  int _currentTab = 0;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
-    _tabController.addListener(() {
-      if (!_tabController.indexIsChanging) {
-        setState(() => _currentTab = _tabController.index);
-      }
-    });
+    _tabController = TabController(length: 8, vsync: this);
     _loadData();
   }
 
@@ -74,6 +71,10 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
       ),
     );
     if (confirmed == true) {
+      // Clear theme role
+      if (mounted) {
+        context.read<ThemeProvider>().clearRole();
+      }
       await _authService.signOut();
       if (mounted) context.go(RouteConstants.login);
     }
@@ -90,11 +91,9 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: const Text('Command Center'),
-        backgroundColor: AppTheme.teacherColor,
-        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
@@ -103,15 +102,13 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          indicatorColor: Colors.white,
           indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(icon: Icon(Icons.people), text: 'Students'),
             Tab(icon: Icon(Icons.work), text: 'Careers'),
             Tab(icon: Icon(Icons.route), text: 'Roadmaps'),
             Tab(icon: Icon(Icons.rate_review), text: 'Reviews'),
+            Tab(icon: Icon(Icons.help_center), text: 'Doubts'),
             Tab(icon: Icon(Icons.campaign), text: 'Notices'),
             Tab(icon: Icon(Icons.quiz), text: 'Quizzes'),
             Tab(icon: Icon(Icons.analytics), text: 'Analytics'),
@@ -127,6 +124,7 @@ class _TeacherCommandCenterState extends State<TeacherCommandCenter>
                 const CareerFactoryTab(),
                 const RoadmapArchitectTab(),
                 const ReviewHubTab(),
+                const DoubtsHubTab(),
                 const NoticeBoardTab(),
                 const AssessmentLabTab(),
                 AnalyticsTab(students: _students),
