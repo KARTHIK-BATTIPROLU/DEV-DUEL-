@@ -1,11 +1,11 @@
-/// User model class
-/// Represents a user in the application with role-based access
+/// User Model
+/// Represents a user in the application (Student or Teacher)
 
 class UserModel {
   final String uid;
   final String name;
   final String email;
-  final String role; // 'STUDENT' or 'TEACHER'
+  final String role;
   final DateTime? createdAt;
 
   UserModel({
@@ -16,7 +16,7 @@ class UserModel {
     this.createdAt,
   });
 
-  /// Create UserModel from Firestore document
+  /// Create UserModel from Firestore document map
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       uid: map['uid'] ?? '',
@@ -24,27 +24,21 @@ class UserModel {
       email: map['email'] ?? '',
       role: map['role'] ?? '',
       createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'])
+          ? DateTime.tryParse(map['createdAt'].toString())
           : null,
     );
   }
 
-  /// Convert UserModel to Map for Firestore
+  /// Convert UserModel to map for Firestore
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,
       'name': name,
       'email': email,
       'role': role,
-      'createdAt': createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'createdAt': createdAt?.toIso8601String(),
     };
   }
-
-  /// Check if user is a student
-  bool get isStudent => role == 'STUDENT';
-
-  /// Check if user is a teacher
-  bool get isTeacher => role == 'TEACHER';
 
   /// Create a copy with updated fields
   UserModel copyWith({
@@ -61,10 +55,5 @@ class UserModel {
       role: role ?? this.role,
       createdAt: createdAt ?? this.createdAt,
     );
-  }
-
-  @override
-  String toString() {
-    return 'UserModel(uid: $uid, name: $name, email: $email, role: $role)';
   }
 }
